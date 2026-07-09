@@ -18,13 +18,14 @@ function slugify(text: string): string {
   return text
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .replace(/\s+/g, '-')
     .substring(0, 64);
 }
 
 export function renderMarkdown(source: string, filePath: string): RenderResult {
   const dir = path.dirname(filePath);
+  const usedIds = new Set<string>();
 
   const renderer = new marked.Renderer();
   const originalImage = renderer.image;
@@ -43,7 +44,13 @@ export function renderMarkdown(source: string, filePath: string): RenderResult {
   renderer.heading = function ({ tokens, depth }) {
     const text = this.parser.parseInline(tokens);
     const plain = text.replace(/<[^>]+>/g, '');
-    const id = slugify(plain);
+    let id = slugify(plain) || 'heading';
+    if (usedIds.has(id)) {
+      let counter = 2;
+      while (usedIds.has(`${id}-${counter}`)) counter++;
+      id = `${id}-${counter}`;
+    }
+    usedIds.add(id);
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
 

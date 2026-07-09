@@ -74,10 +74,12 @@
     .sidebar {
       width: 260px;
       min-width: 200px;
+      max-width: 50vw;
       background: var(--surface);
       display: flex;
       flex-direction: column;
       transition: transform 0.25s ease;
+      position: relative;
     }
 
     .left-sidebar {
@@ -86,6 +88,48 @@
 
     .right-sidebar {
       border-left: 1px solid var(--border);
+    }
+
+    .resize-handle {
+      position: absolute;
+      top: 0;
+      right: -4px;
+      width: 8px;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 20;
+      background: transparent;
+      transition: background 0.15s;
+    }
+
+    .resize-handle:hover, .resize-handle.resizing {
+      background: var(--accent);
+      opacity: 0.25;
+    }
+
+    .sidebar-search {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-search input {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .sidebar-search input:focus {
+      border-color: var(--accent);
+    }
+
+    .sidebar-search input::placeholder {
+      color: var(--text-muted);
     }
 
     .sidebar-header {
@@ -151,9 +195,15 @@
       color: var(--text);
     }
 
-    .tree-node.active, .outline-node.active {
+    .tree-node.active {
       background: rgba(88, 166, 255, 0.12);
       color: var(--accent);
+    }
+
+    .outline-node.active {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+      font-weight: 600;
     }
 
     .tree-node svg {
@@ -484,12 +534,16 @@
 <body>
   <div class="app">
     <aside class="sidebar left-sidebar" id="leftSidebar">
+      <div class="resize-handle" id="resizeHandle"></div>
       <div class="sidebar-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
         </svg>
         <h1>view</h1>
+      </div>
+      <div class="sidebar-search">
+        <input type="text" id="treeSearch" placeholder="Search files…" autocomplete="off">
       </div>
       <nav class="tree" id="tree"><div class="empty">Loading…</div></nav>
     </aside>
@@ -539,8 +593,14 @@
     const contentEl = document.getElementById('content');
     const leftSidebar = document.getElementById('leftSidebar');
     const filesBtn = document.getElementById('filesBtn');
+    const treeSearch = document.getElementById('treeSearch');
+    const resizeHandle = document.getElementById('resizeHandle');
 
     filesBtn?.addEventListener('click', () => leftSidebar.classList.toggle('open'));
+
+    let treeRoot = null;
+    let ignoreScrollSpy = false;
+    const SIDEBAR_WIDTH_KEY = 'view-sidebar-width';
 
     const fileIcon = `<svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
     const folderIcon = `<svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
@@ -573,13 +633,45 @@
 
     async function loadTree() {
       const res = await fetch('/api/tree');
-      const root = await res.json();
-      treeEl.innerHTML = '';
-      treeEl.appendChild(buildNode(root, true));
+      treeRoot = await res.json();
+      renderTree(treeRoot);
       if (initialFile) openFile(initialFile);
     }
 
-    function buildNode(node, isRoot = false) {
+    function renderTree(root) {
+      treeEl.innerHTML = '';
+      treeEl.appendChild(buildNode(root, true));
+    }
+
+    treeSearch?.addEventListener('input', () => {
+      const query = treeSearch.value.trim().toLowerCase();
+      if (!query) {
+        renderTree(treeRoot);
+        return;
+      }
+      const filtered = filterTree(treeRoot, query);
+      treeEl.innerHTML = '';
+      if (!filtered) {
+        treeEl.innerHTML = '<div class="empty">No matching files</div>';
+        return;
+      }
+      treeEl.appendChild(buildNode(filtered, true, true));
+    });
+
+    function filterTree(node, query) {
+      if (node.type === 'file') {
+        return node.name.toLowerCase().includes(query) ? node : null;
+      }
+      const children = node.children
+        ?.map((child) => filterTree(child, query))
+        .filter(Boolean);
+      if (children?.length) {
+        return { ...node, children };
+      }
+      return node.name.toLowerCase().includes(query) ? { ...node, children: [] } : null;
+    }
+
+    function buildNode(node, isRoot = false, forceExpand = false) {
       const ul = document.createElement('ul');
       const li = document.createElement('li');
       const row = document.createElement('div');
@@ -598,10 +690,15 @@
       if (node.children?.length) {
         const childUl = document.createElement('ul');
         childUl.className = 'tree-children';
+        if (forceExpand) childUl.style.display = 'block';
         for (const child of node.children) {
-          childUl.appendChild(buildNode(child));
+          childUl.appendChild(buildNode(child, false, forceExpand));
         }
         li.appendChild(childUl);
+
+        if (forceExpand) {
+          row.querySelector('.arrow')?.classList.remove('collapsed');
+        }
 
         row.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -746,8 +843,13 @@
         node.title = text;
         node.textContent = text;
         node.addEventListener('click', () => {
+          document.querySelectorAll('.outline-node').forEach((el) => {
+            el.classList.toggle('active', el === node);
+          });
+          ignoreScrollSpy = true;
           h.scrollIntoView({ behavior: 'smooth', block: 'start' });
           history.replaceState(null, '', `#${id}`);
+          setTimeout(() => { ignoreScrollSpy = false; updateOutlineActive(); }, 1200);
         });
         li.appendChild(node);
         ul.appendChild(li);
@@ -762,16 +864,28 @@
     }
 
     function updateOutlineActive() {
-      const headings = contentEl.querySelectorAll('.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6');
+      if (ignoreScrollSpy) return;
+      const headings = [...contentEl.querySelectorAll('.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6')];
+      if (headings.length === 0) return;
+
       let currentId = null;
-      for (const h of headings) {
-        const rect = h.getBoundingClientRect();
-        if (rect.top <= 120) {
-          currentId = h.id;
-        } else {
-          break;
+      const nearBottom = contentEl.scrollHeight - contentEl.scrollTop - contentEl.clientHeight < 80;
+
+      if (nearBottom) {
+        currentId = headings[headings.length - 1].id;
+      } else {
+        for (const h of headings) {
+          const rect = h.getBoundingClientRect();
+          if (rect.top <= 80) {
+            currentId = h.id;
+          } else {
+            break;
+          }
         }
       }
+
+      if (!currentId) currentId = headings[0].id;
+
       document.querySelectorAll('.outline-node').forEach((el) => {
         el.classList.toggle('active', el.dataset.target === currentId);
       });
@@ -803,6 +917,53 @@
     setInterval(() => {
       if (currentPath) openFile(currentPath, true);
     }, 5000);
+
+    // Restore sidebar width from localStorage.
+    (function restoreSidebarWidth() {
+      const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      if (saved) {
+        const width = parseInt(saved, 10);
+        if (width >= 180 && width <= window.innerWidth * 0.5) {
+          leftSidebar.style.width = `${width}px`;
+        }
+      }
+    })();
+
+    // Drag to resize left sidebar.
+    (function setupResize() {
+      if (!resizeHandle) return;
+      let startX = 0;
+      let startWidth = 0;
+
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startWidth = leftSidebar.offsetWidth;
+        resizeHandle.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (ev) => {
+          const delta = ev.clientX - startX;
+          const newWidth = Math.max(180, Math.min(window.innerWidth * 0.5, startWidth + delta));
+          leftSidebar.style.width = `${newWidth}px`;
+        };
+
+        const onMouseUp = (ev) => {
+          const delta = ev.clientX - startX;
+          const newWidth = Math.max(180, Math.min(window.innerWidth * 0.5, startWidth + delta));
+          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(newWidth));
+          resizeHandle.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+    })();
   </script>
 </body>
 </html>
