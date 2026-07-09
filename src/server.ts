@@ -20,6 +20,8 @@ const IMAGE_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico', '.avif',
 ]);
 
+const HTML_EXTENSIONS = new Set(['.html', '.htm']);
+
 const CODE_EXTENSION_MAP: Record<string, string> = {
   '.ts': 'typescript',
   '.tsx': 'tsx',
@@ -80,6 +82,10 @@ function isImage(filePath: string): boolean {
 
 function isPdf(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === '.pdf';
+}
+
+function isHtml(filePath: string): boolean {
+  return HTML_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 function isCode(filePath: string): boolean {
@@ -201,6 +207,18 @@ export async function startServer(options: PreviewOptions): Promise<{
           return Response.json(tree, { headers: noCache });
         }
 
+        if (pathname.startsWith('/files/')) {
+          const raw = decodeURIComponent(pathname.slice('/files/'.length));
+          if (!raw) return new Response('Missing path', { status: 400, headers: noCache });
+          const target = resolveSafePath(options.root, raw);
+          const stat = fs.statSync(target);
+          if (!stat.isFile()) return new Response('Not a file', { status: 400, headers: noCache });
+          const file = Bun.file(target);
+          return new Response(file, {
+            headers: { 'Content-Type': getContentType(target), ...noCache },
+          });
+        }
+
         if (pathname === '/api/file') {
           const raw = url.searchParams.get('path');
           if (!raw) return new Response('Missing path', { status: 400, headers: noCache });
@@ -250,6 +268,18 @@ export async function startServer(options: PreviewOptions): Promise<{
           if (isPdf(target)) {
             return Response.json(
               { type: 'pdf', url: fileUrl, title: path.basename(target), size: stat.size },
+              { headers: noCache }
+            );
+          }
+
+          if (isHtml(target)) {
+            return Response.json(
+              {
+                type: 'html',
+                url: `/files/${relativePath.split('/').map(encodeURIComponent).join('/')}`,
+                title: path.basename(target),
+                size: stat.size,
+              },
               { headers: noCache }
             );
           }
