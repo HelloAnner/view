@@ -1,0 +1,39 @@
+{
+  "name": "view",
+  "version": "0.1.0",
+  "description": "A CLI tool to preview Markdown files and directories in the browser.",
+  "module": "index.ts",
+  "type": "module",
+  "bin": {
+    "v": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --outfile dist/cli.js --target node",
+    "compile": "bun build src/cli.ts --outfile dist/view --compile",
+    "dev": "bun run src/cli.ts",
+    "test": "bun test"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "markdown",
+    "preview",
+    "cli",
+    "viewer"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^15.0.11",
+    "marked-highlight": "^2.2.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
