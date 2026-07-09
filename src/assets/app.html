@@ -585,6 +585,7 @@
 
   <script>
     const initialFile = {{INITIAL_FILE}};
+    let requestedFile = initialFile;
     let currentPath = null;
     let lastHtml = '';
 
@@ -634,28 +635,40 @@
     async function loadTree() {
       const res = await fetch('/api/tree');
       treeRoot = await res.json();
-      renderTree(treeRoot);
-      if (initialFile) openFile(initialFile);
+      renderTree(treeRoot, requestedFile ? expandedPathsFor(requestedFile) : new Set());
+      if (requestedFile) openFile(requestedFile);
     }
 
-    function renderTree(root) {
+    function expandedPathsFor(filePath) {
+      const paths = new Set(['']);
+      const parts = filePath.split('/');
+      let current = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        current = current ? `${current}/${parts[i]}` : parts[i];
+        paths.add(current);
+      }
+      return paths;
+    }
+
+    function renderTree(root, expandedPaths, forceExpand = false) {
       treeEl.innerHTML = '';
-      treeEl.appendChild(buildNode(root, true));
+      const ul = document.createElement('ul');
+      ul.appendChild(buildNode(root, expandedPaths, forceExpand));
+      treeEl.appendChild(ul);
     }
 
     treeSearch?.addEventListener('input', () => {
       const query = treeSearch.value.trim().toLowerCase();
       if (!query) {
-        renderTree(treeRoot);
+        renderTree(treeRoot, currentPath ? expandedPathsFor(currentPath) : new Set());
         return;
       }
       const filtered = filterTree(treeRoot, query);
-      treeEl.innerHTML = '';
       if (!filtered) {
         treeEl.innerHTML = '<div class="empty">No matching files</div>';
         return;
       }
-      treeEl.appendChild(buildNode(filtered, true, true));
+      renderTree(filtered, new Set(), true);
     });
 
     function filterTree(node, query) {
@@ -671,13 +684,15 @@
       return node.name.toLowerCase().includes(query) ? { ...node, children: [] } : null;
     }
 
-    function buildNode(node, isRoot = false, forceExpand = false) {
-      const ul = document.createElement('ul');
+    function buildNode(node, expandedPaths = new Set(), forceExpand = false) {
       const li = document.createElement('li');
       const row = document.createElement('div');
       row.className = 'tree-node';
       row.dataset.path = node.path === '.' ? '' : node.path;
       row.dataset.type = node.type;
+
+      const relativePath = node.path === '.' ? '' : node.path;
+      const expanded = forceExpand || expandedPaths.has(relativePath);
 
       if (node.type === 'directory') {
         row.innerHTML = `${arrowIcon}${folderIcon}<span>${escapeHtml(node.name)}</span>`;
@@ -688,22 +703,23 @@
       li.appendChild(row);
 
       if (node.children?.length) {
-        const childUl = document.createElement('ul');
-        childUl.className = 'tree-children';
-        if (forceExpand) childUl.style.display = 'block';
-        for (const child of node.children) {
-          childUl.appendChild(buildNode(child, false, forceExpand));
-        }
-        li.appendChild(childUl);
-
-        if (forceExpand) {
-          row.querySelector('.arrow')?.classList.remove('collapsed');
-        }
+        const arrow = row.querySelector('.arrow');
+        if (!expanded) arrow?.classList.add('collapsed');
 
         row.addEventListener('click', (e) => {
           e.stopPropagation();
+          let childUl = li.querySelector(':scope > .tree-children');
+          const arrow = row.querySelector('.arrow');
+          if (!childUl) {
+            childUl = document.createElement('ul');
+            childUl.className = 'tree-children collapsed';
+            for (const child of node.children) {
+              childUl.appendChild(buildNode(child, expandedPaths, forceExpand));
+            }
+            li.appendChild(childUl);
+          }
           childUl.classList.toggle('collapsed');
-          row.querySelector('.arrow').classList.toggle('collapsed');
+          arrow?.classList.toggle('collapsed');
         });
       }
 
@@ -711,8 +727,16 @@
         row.addEventListener('click', () => openFile(node.path));
       }
 
-      ul.appendChild(li);
-      return ul;
+      if (expanded && node.children?.length) {
+        const childUl = document.createElement('ul');
+        childUl.className = 'tree-children';
+        for (const child of node.children) {
+          childUl.appendChild(buildNode(child, expandedPaths, forceExpand));
+        }
+        li.appendChild(childUl);
+      }
+
+      return li;
     }
 
     async function openFile(filePath, silent = false) {
@@ -908,10 +932,8 @@
     }
 
     const params = new URLSearchParams(location.search);
-    const requestedFile = params.get('file') || initialFile;
-    loadTree().then(() => {
-      if (requestedFile) openFile(requestedFile);
-    });
+    requestedFile = params.get('file') || initialFile;
+    loadTree();
 
     // Auto-refresh the current file every 5 seconds to reflect local changes.
     setInterval(() => {
