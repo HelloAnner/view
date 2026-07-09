@@ -1014,6 +1014,43 @@
         document.addEventListener('mouseup', onMouseUp);
       });
     })();
+
+    // Notify the server when this tab opens/closes so the background process
+    // can shut down once no tabs are active.
+    (function setupTabLifecycle() {
+      const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const pingIntervalMs = 30 * 1000;
+
+      function post(endpoint, body) {
+        return fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          keepalive: true,
+        }).catch(() => {});
+      }
+
+      function beacon(endpoint, body) {
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(endpoint, new Blob([JSON.stringify(body)], { type: 'application/json' }));
+        } else {
+          post(endpoint, body);
+        }
+      }
+
+      post('/api/open', { tabId });
+      const pingTimer = setInterval(() => post('/api/ping', { tabId }), pingIntervalMs);
+
+      window.__viewTabId = tabId;
+
+      function onUnload() {
+        clearInterval(pingTimer);
+        beacon('/api/close', { tabId });
+      }
+
+      window.addEventListener('beforeunload', onUnload);
+      window.addEventListener('pagehide', onUnload);
+    })();
   </script>
 </body>
 </html>

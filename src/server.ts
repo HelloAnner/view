@@ -170,12 +170,56 @@ function guessInitialFile(root: string): string | null {
   return null;
 }
 
+const MAX_SERVER_LIFETIME_MS = 12 * 60 * 60 * 1000;
+const TAB_PING_TIMEOUT_MS = 60 * 1000;
+const TAB_CHECK_INTERVAL_MS = 10 * 1000;
+
 export async function startServer(options: PreviewOptions): Promise<{
   server: Server;
   url: string;
 }> {
   const initialFile = guessInitialFile(options.root);
   const tree = buildTree(options.root, options.root);
+
+  const tabs = new Map<string, number>();
+  let hasHadTab = false;
+
+  function shutdownServer() {
+    try {
+      server.stop();
+    } catch {
+      // ignore
+    }
+    process.exit(0);
+  }
+
+  const lifetimeTimer = setTimeout(() => {
+    console.log('Maximum server lifetime reached (12h), shutting down.');
+    shutdownServer();
+  }, MAX_SERVER_LIFETIME_MS);
+
+  const checkTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [tabId, lastPing] of tabs) {
+      if (now - lastPing > TAB_PING_TIMEOUT_MS) {
+        tabs.delete(tabId);
+      }
+    }
+    if (hasHadTab && tabs.size === 0) {
+      clearTimeout(lifetimeTimer);
+      clearInterval(checkTimer);
+      shutdownServer();
+    }
+  }, TAB_CHECK_INTERVAL_MS);
+
+  async function readJsonBody(req: Request): Promise<Record<string, unknown> | null> {
+    try {
+      const text = await req.text();
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
 
   const server = Bun.serve({
     port: options.port,
@@ -217,6 +261,35 @@ export async function startServer(options: PreviewOptions): Promise<{
           return new Response(file, {
             headers: { 'Content-Type': getContentType(target), ...noCache },
           });
+        }
+
+        if (pathname === '/api/open' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
+          if (tabId) {
+            tabs.set(tabId, Date.now());
+            hasHadTab = true;
+          }
+          return new Response('ok', { headers: noCache });
+        }
+
+        if (pathname === '/api/ping' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
+          if (tabId) tabs.set(tabId, Date.now());
+          return new Response('ok', { headers: noCache });
+        }
+
+        if (pathname === '/api/close' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
+          if (tabId) tabs.delete(tabId);
+          if (hasHadTab && tabs.size === 0) {
+            clearTimeout(lifetimeTimer);
+            clearInterval(checkTimer);
+            shutdownServer();
+          }
+          return new Response('ok', { headers: noCache });
         }
 
         if (pathname === '/api/file') {
