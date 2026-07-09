@@ -403,16 +403,9 @@
       margin: 0 auto;
     }
 
-    .preview-title {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-
     .image-preview {
       text-align: center;
+      padding: 16px 0;
     }
 
     .image-preview img {
@@ -466,41 +459,23 @@
     }
 
     .binary-preview {
-      max-width: 400px;
+      max-width: 360px;
       margin: 80px auto;
       text-align: center;
-      padding: 32px;
+      padding: 24px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
     }
 
-    .binary-preview svg {
-      width: 48px;
-      height: 48px;
-      color: var(--accent);
-      margin-bottom: 16px;
-    }
-
-    .binary-preview h3 {
-      margin: 0 0 8px;
-      font-size: 16px;
-    }
-
-    .binary-preview p {
-      margin: 0 0 20px;
-      color: var(--text-muted);
-      font-size: 13px;
-    }
-
     .binary-preview a {
       display: inline-block;
-      padding: 8px 16px;
+      padding: 10px 18px;
       background: var(--accent);
       color: #fff;
       border-radius: 6px;
       text-decoration: none;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
     }
 
@@ -822,13 +797,11 @@
       if (data.type === 'image') {
         contentEl.innerHTML = `
           <div class="preview-frame image-preview">
-            <div class="preview-title">${escapeHtml(data.title)} · ${formatBytes(data.size)}</div>
             <img src="${escapeHtml(data.url)}" alt="${escapeHtml(data.title)}">
           </div>`;
       } else if (data.type === 'pdf') {
         contentEl.innerHTML = `
           <div class="preview-frame">
-            <div class="preview-title">${escapeHtml(data.title)} · ${formatBytes(data.size)}</div>
             <div class="pdf-preview">
               <embed src="${escapeHtml(data.url)}" type="application/pdf">
             </div>
@@ -836,7 +809,6 @@
       } else if (data.type === 'html') {
         contentEl.innerHTML = `
           <div class="preview-frame">
-            <div class="preview-title">${escapeHtml(data.title)} · ${formatBytes(data.size)}</div>
             <div class="html-preview">
               <iframe src="${escapeHtml(data.url)}" title="${escapeHtml(data.title)}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
             </div>
@@ -844,16 +816,12 @@
       } else if (data.type === 'code') {
         contentEl.innerHTML = `
           <div class="preview-frame">
-            <div class="preview-title">${escapeHtml(data.title)} · ${data.language} · ${formatBytes(data.size)}</div>
             <div class="code-preview"><pre><code class="hljs language-${escapeHtml(data.language)}">${data.html}</code></pre></div>
           </div>`;
       } else {
         contentEl.innerHTML = `
           <div class="binary-preview">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            <h3>${escapeHtml(data.title)}</h3>
-            <p>${escapeHtml(data.mime)} · ${escapeHtml(data.readableSize)}</p>
-            <a href="${escapeHtml(data.url)}" download>Download</a>
+            <a href="${escapeHtml(data.url)}" download>Download ${escapeHtml(data.title)}</a>
           </div>`;
       }
 

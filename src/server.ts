@@ -284,11 +284,9 @@ export async function startServer(options: PreviewOptions): Promise<{
           const body = await readJsonBody(req);
           const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
           if (tabId) tabs.delete(tabId);
-          if (hasHadTab && tabs.size === 0) {
-            clearTimeout(lifetimeTimer);
-            clearInterval(checkTimer);
-            shutdownServer();
-          }
+          // Do not stop immediately; the periodic check will shut down after a
+          // short grace period. This prevents killing the server when a tab
+          // navigates to another file (close fires before the next open).
           return new Response('ok', { headers: noCache });
         }
 
