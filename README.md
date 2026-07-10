@@ -1,34 +1,40 @@
 # view
 
-A lightweight CLI tool to preview Markdown files and directories in the browser.
+A lightweight CLI tool to preview local files and directories in a focused, read-only browser workspace.
 
 ## Features
 
 - `v <path>` previews a file or directory instantly
 - Directory preview starts a local temporary HTTP server
-- Left sidebar shows the directory tree
-- Middle panel renders Markdown beautifully
-- Right sidebar shows the document heading outline
+- Collapsible file explorer with lazy-loaded folders and file search
+- Markdown renders as a focused document with a contextual heading outline
+- Code and readable text open in an editor-style viewer with line numbers, wrapping, copy actions, and file metadata
+- Markdown, HTML, and SVG files can switch between Preview and Source without losing scroll or zoom state
+- Images open on a pannable canvas with fit, actual-size, and zoom controls
+- HTML previews run in a sandboxed route isolated from the workspace UI
+- File explorer navigation supports keyboard arrows, Home/End, Enter, `/` to filter, and `Ctrl/Cmd+B` to toggle
+- Single-file launches start in a distraction-free full-width layout
 - Supports relative-path images in Markdown
-- Also previews code files (syntax highlighting), images, PDFs, and other files
+- Also previews images, PDFs, HTML pages, and downloadable binary files
 - Light / dark theme follows your system preference
-- Auto-refreshes every 5 seconds to reflect local file changes
+- Detects file changes every 5 seconds without resetting unchanged previews
+- Large text files fall back to a clearly marked truncated source preview
 - Read-only: never modifies your files
 
 ## Install
 
-### Quick install (global)
+### Quick install
 
 ```bash
 make install
 ```
 
-This compiles a standalone binary and installs it to `/usr/local/bin/v`.
+This compiles a standalone binary and installs it to `~/.local/bin/v`; no `sudo` is required.
 
 To install to a custom location:
 
 ```bash
-make install PREFIX=$HOME/.local
+make install PREFIX=$HOME/tools
 ```
 
 ### Development
@@ -57,8 +63,9 @@ v
 # Preview a specific directory
 v ./docs
 
-# Preview a single Markdown file
+# Preview a single Markdown or code file
 v ./README.md
+v ./src/server.ts
 
 # Use a fixed port and do not open the browser
 v ./docs --port 3000 --no-open

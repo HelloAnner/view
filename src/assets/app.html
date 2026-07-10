@@ -4,561 +4,94 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>view</title>
-  <style>
-    :root {
-      --bg: #ffffff;
-      --surface: #f6f8fa;
-      --surface-2: #f3f4f6;
-      --border: #d0d7de;
-      --text: #1f2328;
-      --text-muted: #656d76;
-      --accent: #0969da;
-      --accent-hover: #0550ae;
-      --code-bg: #f6f8fa;
-      --shadow: 0 4px 24px rgba(31, 35, 40, 0.12);
-      --radius: 10px;
-
-      --hl-base: #1f2328;
-      --hl-keyword: #cf222e;
-      --hl-string: #0a3069;
-      --hl-comment: #6e7781;
-      --hl-number: #0550ae;
-      --hl-function: #8250df;
-      --hl-variable: #953800;
-      --hl-attr: #0550ae;
-      --hl-meta: #0550ae;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1117;
-        --surface: #161b22;
-        --surface-2: #1c2128;
-        --border: #30363d;
-        --text: #c9d1d9;
-        --text-muted: #8b949e;
-        --accent: #58a6ff;
-        --accent-hover: #79b8ff;
-        --code-bg: #161b22;
-        --shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
-
-        --hl-base: #c9d1d9;
-        --hl-keyword: #ff7b72;
-        --hl-string: #a5d6ff;
-        --hl-comment: #8b949e;
-        --hl-number: #79c0ff;
-        --hl-function: #d2a8ff;
-        --hl-variable: #ffa657;
-        --hl-attr: #79c0ff;
-        --hl-meta: #79c0ff;
-      }
-    }
-
-    * { box-sizing: border-box; }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-
-    .app {
-      display: flex;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    .sidebar {
-      width: 260px;
-      min-width: 200px;
-      max-width: 50vw;
-      background: var(--surface);
-      display: flex;
-      flex-direction: column;
-      transition: transform 0.25s ease;
-      position: relative;
-    }
-
-    .left-sidebar {
-      border-right: 1px solid var(--border);
-    }
-
-    .right-sidebar {
-      border-left: 1px solid var(--border);
-    }
-
-    .resize-handle {
-      position: absolute;
-      top: 0;
-      right: -4px;
-      width: 8px;
-      height: 100%;
-      cursor: col-resize;
-      z-index: 20;
-      background: transparent;
-      transition: background 0.15s;
-    }
-
-    .resize-handle:hover, .resize-handle.resizing {
-      background: var(--accent);
-      opacity: 0.25;
-    }
-
-    .sidebar-search {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .sidebar-search input {
-      width: 100%;
-      padding: 6px 10px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
-      outline: none;
-    }
-
-    .sidebar-search input:focus {
-      border-color: var(--accent);
-    }
-
-    .sidebar-search input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .sidebar-header {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-
-    .sidebar-header svg {
-      width: 20px;
-      height: 20px;
-      color: var(--accent);
-    }
-
-    .sidebar-header h1, .sidebar-header h2 {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      color: var(--text);
-    }
-
-    .tree, .outline {
-      flex: 1;
-      overflow: auto;
-      padding: 12px 8px;
-      user-select: none;
-    }
-
-    .tree ul, .outline ul {
-      list-style: none;
-      margin: 0;
-      padding: 0 0 0 14px;
-    }
-
-    .tree > ul, .outline > ul { padding-left: 0; }
-
-    .tree li, .outline li {
-      position: relative;
-    }
-
-    .tree-node, .outline-node {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.4;
-      transition: background 0.15s, color 0.15s;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .tree-node:hover, .outline-node:hover {
-      background: var(--surface-2);
-      color: var(--text);
-    }
-
-    .tree-node.active {
-      background: rgba(88, 166, 255, 0.12);
-      color: var(--accent);
-    }
-
-    .outline-node.active {
-      background: rgba(88, 166, 255, 0.15);
-      color: var(--accent);
-      font-weight: 600;
-    }
-
-    .tree-node svg {
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-    }
-
-    .tree-node .arrow {
-      transition: transform 0.15s;
-    }
-
-    .tree-node .arrow.collapsed {
-      transform: rotate(-90deg);
-    }
-
-    .tree-node .file-icon { color: var(--accent); }
-    .tree-node .folder-icon { color: #e3b341; }
-    .tree-node .image-icon { color: #a371f7; }
-    .tree-node .html-icon { color: #ff7b72; }
-    .tree-node .code-icon { color: #3fb950; }
-    .tree-node .pdf-icon { color: #f85149; }
-
-    .tree-children { display: block; }
-    .tree-children.collapsed { display: none; }
-
-    .outline-node {
-      padding-left: 8px;
-    }
-
-    .outline-node[data-level="1"] { padding-left: 8px; }
-    .outline-node[data-level="2"] { padding-left: 18px; }
-    .outline-node[data-level="3"] { padding-left: 28px; }
-    .outline-node[data-level="4"] { padding-left: 38px; }
-    .outline-node[data-level="5"] { padding-left: 48px; }
-    .outline-node[data-level="6"] { padding-left: 58px; }
-
-    .main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      background: var(--bg);
-    }
-
-    .toolbar {
-      display: none;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      gap: 10px;
-    }
-
-    .toolbar-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .toolbar-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .menu-btn {
-      background: none;
-      border: none;
-      color: var(--text);
-      cursor: pointer;
-      padding: 6px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .menu-btn:hover { background: var(--surface-2); }
-
-    .content {
-      flex: 1;
-      overflow: auto;
-      padding: 48px 64px;
-    }
-
-    .markdown-body {
-      max-width: 860px;
-      margin: 0 auto;
-      line-height: 1.7;
-      font-size: 15px;
-    }
-
-    .markdown-body h1, .markdown-body h2, .markdown-body h3,
-    .markdown-body h4, .markdown-body h5, .markdown-body h6 {
-      margin-top: 32px;
-      margin-bottom: 14px;
-      font-weight: 600;
-      line-height: 1.3;
-      color: var(--text);
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
-      scroll-margin-top: 24px;
-    }
-
-    .markdown-body h1 { font-size: 1.9em; border-bottom-width: 2px; }
-    .markdown-body h2 { font-size: 1.5em; }
-    .markdown-body h3 { font-size: 1.2em; border-bottom: none; }
-    .markdown-body h4 { font-size: 1.05em; border-bottom: none; }
-    .markdown-body h5 { font-size: 1em; border-bottom: none; }
-    .markdown-body h6 { font-size: 0.95em; border-bottom: none; color: var(--text-muted); }
-
-    .markdown-body p { margin: 0 0 16px; }
-
-    .markdown-body a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .markdown-body a:hover { text-decoration: underline; }
-
-    .markdown-body img {
-      max-width: 100%;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      margin: 8px 0;
-    }
-
-    .markdown-body pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      overflow: auto;
-      margin: 0 0 20px;
-    }
-
-    .markdown-body code {
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 0.9em;
-    }
-
-    .markdown-body pre code {
-      background: transparent;
-      padding: 0;
-      border-radius: 0;
-      color: var(--text);
-    }
-
-    .markdown-body :not(pre) > code {
-      background: var(--surface-2);
-      padding: 2px 6px;
-      border-radius: 5px;
-      color: var(--hl-keyword);
-    }
-
-    .markdown-body blockquote {
-      margin: 0 0 18px;
-      padding: 10px 18px;
-      border-left: 4px solid var(--accent);
-      background: var(--surface);
-      border-radius: 0 var(--radius) var(--radius) 0;
-      color: var(--text-muted);
-    }
-
-    .markdown-body ul, .markdown-body ol {
-      margin: 0 0 18px;
-      padding-left: 24px;
-    }
-
-    .markdown-body li { margin: 4px 0; }
-
-    .markdown-body table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 0 0 20px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-
-    .markdown-body th, .markdown-body td {
-      padding: 10px 14px;
-      border: 1px solid var(--border);
-      text-align: left;
-    }
-
-    .markdown-body th {
-      background: var(--surface);
-      font-weight: 600;
-    }
-
-    .markdown-body tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-
-    .preview-frame {
-      max-width: 860px;
-      margin: 0 auto;
-    }
-
-    .image-preview {
-      text-align: center;
-      padding: 16px 0;
-    }
-
-    .image-preview img {
-      max-width: 100%;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-
-    .pdf-preview {
-      height: 80vh;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      background: var(--surface);
-    }
-
-    .pdf-preview iframe, .pdf-preview embed {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
-    .html-preview {
-      height: calc(100vh - 128px);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      background: var(--surface);
-    }
-
-    .html-preview iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      background: #fff;
-    }
-
-    .code-preview {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: auto;
-    }
-
-    .code-preview pre {
-      margin: 0;
-      padding: 16px;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 13.5px;
-      line-height: 1.6;
-    }
-
-    .binary-preview {
-      max-width: 360px;
-      margin: 80px auto;
-      text-align: center;
-      padding: 24px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-    }
-
-    .binary-preview a {
-      display: inline-block;
-      padding: 10px 18px;
-      background: var(--accent);
-      color: #fff;
-      border-radius: 6px;
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .binary-preview a:hover { background: var(--accent-hover); }
-
-    .empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--text-muted);
-      text-align: center;
-      padding: 40px;
-    }
-
-    .empty h2 { margin: 0 0 10px; color: var(--text); }
-
-    @media (max-width: 1024px) {
-      .right-sidebar { display: none; }
-    }
-
-    @media (max-width: 768px) {
-      .left-sidebar {
-        position: absolute;
-        z-index: 10;
-        height: 100%;
-        transform: translateX(-100%);
-      }
-      .left-sidebar.open { transform: translateX(0); }
-      .toolbar { display: flex; }
-      .content { padding: 24px; }
-    }
-
-    /* Syntax highlight tokens */
-    .hljs { color: var(--hl-base); }
-    .hljs-keyword, .hljs-selector-tag, .hljs-addition { color: var(--hl-keyword); }
-    .hljs-string, .hljs-title, .hljs-section, .hljs-built_in { color: var(--hl-string); }
-    .hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
-    .hljs-number, .hljs-literal { color: var(--hl-number); }
-    .hljs-function, .hljs-class .hljs-title { color: var(--hl-function); }
-    .hljs-variable, .hljs-template-variable { color: var(--hl-variable); }
-    .hljs-attr, .hljs-attribute { color: var(--hl-attr); }
-    .hljs-meta { color: var(--hl-meta); }
-  </style>
+  <style>{{APP_CSS}}</style>
 </head>
 <body>
-  <div class="app">
+  <a class="skip-link" href="#content">Skip to preview</a>
+  <div class="app" id="app">
     <aside class="sidebar left-sidebar" id="leftSidebar">
       <div class="resize-handle" id="resizeHandle"></div>
       <div class="sidebar-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
         </svg>
-        <h1>view</h1>
+        <div class="project-identity" id="projectIdentity">
+          <h1 id="projectName">view</h1>
+          <span class="project-kicker">Local workspace</span>
+        </div>
+        <button class="icon-button" id="collapseExplorerBtn" aria-label="Hide file explorer" title="Hide file explorer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
       </div>
       <div class="sidebar-search">
-        <input type="text" id="treeSearch" placeholder="Search files…" autocomplete="off">
+        <input type="search" id="treeSearch" aria-label="Filter files" placeholder="Filter files…" autocomplete="off" spellcheck="false">
       </div>
-      <nav class="tree" id="tree"><div class="empty">Loading…</div></nav>
+      <nav class="tree" id="tree" role="tree" aria-label="Files" aria-multiselectable="false"><div class="empty">Loading…</div></nav>
     </aside>
 
     <main class="main">
-      <div class="toolbar">
-        <span class="toolbar-title">view</span>
-        <div class="toolbar-actions">
-          <button class="menu-btn" id="filesBtn" aria-label="Files">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+      <header class="filebar">
+        <button class="icon-button" id="explorerBtn" aria-label="Show file explorer" aria-expanded="true" title="Toggle file explorer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 4h6l2 3h10v13H3z"></path>
+          </svg>
+        </button>
+        <div class="file-context" id="fileContext" aria-live="polite">
+          <span class="file-placeholder">No file selected</span>
+        </div>
+        <div class="filebar-actions">
+          <div class="view-switch" id="viewSwitch" role="group" aria-label="File view" hidden>
+            <button class="view-option" type="button" data-view="preview" aria-label="Preview file" title="Preview">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <span>Preview</span>
+            </button>
+            <button class="view-option" type="button" data-view="source" aria-label="View source" title="Source">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+              <span>Source</span>
+            </button>
+          </div>
+          <button class="icon-button" id="wrapBtn" aria-label="Wrap long lines" aria-pressed="false" title="Wrap long lines" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6h13a3 3 0 0 1 0 6H7"></path><polyline points="10 9 7 12 10 15"></polyline><line x1="4" y1="18" x2="12" y2="18"></line>
             </svg>
           </button>
+          <button class="icon-button" id="copyContentBtn" aria-label="Copy file contents" title="Copy file contents" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button class="icon-button" id="copyPathBtn" aria-label="Copy relative path" title="Copy relative path" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"></path>
+            </svg>
+          </button>
+          <button class="icon-button" id="outlineBtn" aria-label="Show document outline" aria-expanded="false" title="Document outline" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+          </button>
+          <button class="icon-button" id="reloadPreviewBtn" aria-label="Reload preview" title="Reload preview" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"></path></svg>
+          </button>
+          <button class="icon-button" id="openExternalBtn" aria-label="Open preview in new tab" title="Open preview in new tab" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </button>
+          <div class="refresh-state" id="refreshState" title="Files are checked for changes every 5 seconds">
+            <span class="refresh-dot"></span><span id="refreshLabel">Watching</span>
+          </div>
         </div>
-      </div>
-      <div class="content" id="content">
+      </header>
+      <div class="content" id="content" tabindex="-1">
         <div class="empty">
           <h2>Select a file</h2>
-          <p>Choose a file from the sidebar to preview.</p>
+          <p>Choose a file from the explorer to preview it.</p>
         </div>
       </div>
     </main>
 
-    <aside class="sidebar right-sidebar" id="rightSidebar">
+    <aside class="sidebar right-sidebar is-hidden" id="rightSidebar" aria-label="Document outline">
       <div class="sidebar-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -569,456 +102,18 @@
           <line x1="3" y1="18" x2="3.01" y2="18"></line>
         </svg>
         <h2>Outline</h2>
+        <button class="icon-button outline-close" id="outlineCloseBtn" aria-label="Close document outline" title="Close document outline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
-      <nav class="outline" id="outline"><div class="empty">No headings</div></nav>
+      <nav class="outline" id="outline" aria-label="Headings"><div class="empty">No headings</div></nav>
     </aside>
+    <button class="panel-scrim" id="panelScrim" aria-label="Close panel" hidden></button>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script>
-    const initialFile = {{INITIAL_FILE}};
-    let requestedFile = initialFile;
-    let currentPath = null;
-    let lastHtml = '';
-
-    const treeEl = document.getElementById('tree');
-    const outlineEl = document.getElementById('outline');
-    const contentEl = document.getElementById('content');
-    const leftSidebar = document.getElementById('leftSidebar');
-    const filesBtn = document.getElementById('filesBtn');
-    const treeSearch = document.getElementById('treeSearch');
-    const resizeHandle = document.getElementById('resizeHandle');
-
-    filesBtn?.addEventListener('click', () => leftSidebar.classList.toggle('open'));
-
-    let treeRoot = null;
-    let ignoreScrollSpy = false;
-    const SIDEBAR_WIDTH_KEY = 'view-sidebar-width';
-
-    const fileIcon = `<svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
-    const folderIcon = `<svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
-    const arrowIcon = `<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-    const imageIcon = `<svg class="image-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
-    const htmlIcon = `<svg class="html-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="12" y2="16"></line></svg>`;
-    const codeIcon = `<svg class="code-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
-    const pdfIcon = `<svg class="pdf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M10 13v-1a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v1"></path><line x1="10" y1="17" x2="14" y2="17"></line></svg>`;
-
-    const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico', '.avif']);
-    const PDF_EXTS = new Set(['.pdf']);
-    const HTML_EXTS = new Set(['.html', '.htm']);
-    const CODE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.xml', '.css', '.scss', '.sass', '.less', '.py', '.java', '.c', '.cpp', '.cc', '.h', '.hpp', '.rs', '.go', '.rb', '.php', '.sh', '.bash', '.zsh', '.yaml', '.yml', '.toml', '.sql', '.swift', '.kt', '.kts', '.vue', '.svelte', '.dart', '.lua', '.r', '.pl', '.perl', '.dockerfile', '.ini', '.cfg', '.conf', '.makefile', '.mk']);
-    const MARKDOWN_EXTS = new Set(['.md', '.markdown', '.mdx']);
-
-    function fileType(name) {
-      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-      if (MARKDOWN_EXTS.has(ext)) return 'markdown';
-      if (IMAGE_EXTS.has(ext)) return 'image';
-      if (PDF_EXTS.has(ext)) return 'pdf';
-      if (HTML_EXTS.has(ext)) return 'html';
-      if (CODE_EXTS.has(ext)) return 'code';
-      return 'binary';
-    }
-
-    function treeIcon(name) {
-      const type = fileType(name);
-      if (type === 'image') return imageIcon;
-      if (type === 'html') return htmlIcon;
-      if (type === 'code') return codeIcon;
-      if (type === 'pdf') return pdfIcon;
-      return fileIcon;
-    }
-
-    async function loadTree() {
-      const res = await fetch('/api/tree');
-      treeRoot = await res.json();
-      renderTree(treeRoot, requestedFile ? expandedPathsFor(requestedFile) : new Set());
-      if (requestedFile) openFile(requestedFile);
-    }
-
-    function expandedPathsFor(filePath) {
-      const paths = new Set(['']);
-      const parts = filePath.split('/');
-      let current = '';
-      for (let i = 0; i < parts.length - 1; i++) {
-        current = current ? `${current}/${parts[i]}` : parts[i];
-        paths.add(current);
-      }
-      return paths;
-    }
-
-    function renderTree(root, expandedPaths, forceExpand = false) {
-      treeEl.innerHTML = '';
-      const ul = document.createElement('ul');
-      ul.appendChild(buildNode(root, expandedPaths, forceExpand));
-      treeEl.appendChild(ul);
-    }
-
-    treeSearch?.addEventListener('input', () => {
-      const query = treeSearch.value.trim().toLowerCase();
-      if (!query) {
-        renderTree(treeRoot, currentPath ? expandedPathsFor(currentPath) : new Set());
-        return;
-      }
-      const filtered = filterTree(treeRoot, query);
-      if (!filtered) {
-        treeEl.innerHTML = '<div class="empty">No matching files</div>';
-        return;
-      }
-      renderTree(filtered, new Set(), true);
-    });
-
-    function filterTree(node, query) {
-      if (node.type === 'file') {
-        return node.name.toLowerCase().includes(query) ? node : null;
-      }
-      const children = node.children
-        ?.map((child) => filterTree(child, query))
-        .filter(Boolean);
-      if (children?.length) {
-        return { ...node, children };
-      }
-      return node.name.toLowerCase().includes(query) ? { ...node, children: [] } : null;
-    }
-
-    function buildNode(node, expandedPaths = new Set(), forceExpand = false) {
-      const li = document.createElement('li');
-      const row = document.createElement('div');
-      row.className = 'tree-node';
-      row.dataset.path = node.path === '.' ? '' : node.path;
-      row.dataset.type = node.type;
-
-      const relativePath = node.path === '.' ? '' : node.path;
-      const expanded = forceExpand || expandedPaths.has(relativePath);
-
-      if (node.type === 'directory') {
-        row.innerHTML = `${arrowIcon}${folderIcon}<span>${escapeHtml(node.name)}</span>`;
-      } else {
-        row.innerHTML = `<span style="width:14px"></span>${treeIcon(node.name)}<span>${escapeHtml(node.name)}</span>`;
-      }
-
-      li.appendChild(row);
-
-      if (node.children?.length) {
-        const arrow = row.querySelector('.arrow');
-        if (!expanded) arrow?.classList.add('collapsed');
-
-        row.addEventListener('click', (e) => {
-          e.stopPropagation();
-          let childUl = li.querySelector(':scope > .tree-children');
-          const arrow = row.querySelector('.arrow');
-          if (!childUl) {
-            childUl = document.createElement('ul');
-            childUl.className = 'tree-children collapsed';
-            for (const child of node.children) {
-              childUl.appendChild(buildNode(child, expandedPaths, forceExpand));
-            }
-            li.appendChild(childUl);
-          }
-          childUl.classList.toggle('collapsed');
-          arrow?.classList.toggle('collapsed');
-        });
-      }
-
-      if (node.type === 'file') {
-        row.addEventListener('click', () => openFile(node.path));
-      }
-
-      if (expanded && node.children?.length) {
-        const childUl = document.createElement('ul');
-        childUl.className = 'tree-children';
-        for (const child of node.children) {
-          childUl.appendChild(buildNode(child, expandedPaths, forceExpand));
-        }
-        li.appendChild(childUl);
-      }
-
-      return li;
-    }
-
-    async function openFile(filePath, silent = false) {
-      const type = fileType(filePath);
-      if (type === 'markdown') {
-        return loadFile(filePath, silent);
-      }
-      return previewFile(filePath, silent);
-    }
-
-    async function loadFile(filePath, silent = false) {
-      currentPath = filePath;
-      updateActive(filePath);
-      if (!silent) {
-        history.replaceState(null, '', `?file=${encodeURIComponent(filePath)}${location.hash}`);
-      }
-
-      const res = await fetch(`/api/render?path=${encodeURIComponent(filePath)}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        if (!silent) {
-          contentEl.innerHTML = `<div class="empty"><h2>Could not preview</h2><p>${escapeHtml(await res.text())}</p></div>`;
-          outlineEl.innerHTML = '<div class="empty">No headings</div>';
-          lastHtml = '';
-        }
-        return;
-      }
-      const data = await res.json();
-
-      if (data.html === lastHtml) return;
-
-      const scrollTop = contentEl.scrollTop;
-      contentEl.innerHTML = `<article class="markdown-body">${data.html}</article>`;
-      if (silent) contentEl.scrollTop = scrollTop;
-      lastHtml = data.html;
-
-      buildOutline();
-      if (!silent) restoreHashScroll();
-
-      if (!silent && window.innerWidth <= 768) leftSidebar.classList.remove('open');
-    }
-
-    async function previewFile(filePath, silent = false) {
-      currentPath = filePath;
-      updateActive(filePath);
-      if (!silent) {
-        history.replaceState(null, '', `?file=${encodeURIComponent(filePath)}`);
-      }
-
-      const res = await fetch(`/api/preview?path=${encodeURIComponent(filePath)}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        if (!silent) {
-          contentEl.innerHTML = `<div class="empty"><h2>Could not preview</h2><p>${escapeHtml(await res.text())}</p></div>`;
-          outlineEl.innerHTML = '<div class="empty">No headings</div>';
-        }
-        return;
-      }
-      const data = await res.json();
-
-      if (data.type === 'image') {
-        contentEl.innerHTML = `
-          <div class="preview-frame image-preview">
-            <img src="${escapeHtml(data.url)}" alt="${escapeHtml(data.title)}">
-          </div>`;
-      } else if (data.type === 'pdf') {
-        contentEl.innerHTML = `
-          <div class="preview-frame">
-            <div class="pdf-preview">
-              <embed src="${escapeHtml(data.url)}" type="application/pdf">
-            </div>
-          </div>`;
-      } else if (data.type === 'html') {
-        contentEl.innerHTML = `
-          <div class="preview-frame">
-            <div class="html-preview">
-              <iframe src="${escapeHtml(data.url)}" title="${escapeHtml(data.title)}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
-            </div>
-          </div>`;
-      } else if (data.type === 'code') {
-        contentEl.innerHTML = `
-          <div class="preview-frame">
-            <div class="code-preview"><pre><code class="hljs language-${escapeHtml(data.language)}">${data.html}</code></pre></div>
-          </div>`;
-      } else {
-        contentEl.innerHTML = `
-          <div class="binary-preview">
-            <a href="${escapeHtml(data.url)}" download>Download ${escapeHtml(data.title)}</a>
-          </div>`;
-      }
-
-      outlineEl.innerHTML = '<div class="empty">No headings</div>';
-      lastHtml = '';
-
-      if (!silent && window.innerWidth <= 768) leftSidebar.classList.remove('open');
-    }
-
-    function restoreHashScroll() {
-      const hash = location.hash.slice(1);
-      if (!hash) return;
-      const target = contentEl.querySelector(`[id="${CSS.escape(hash)}"]`);
-      if (target) {
-        requestAnimationFrame(() => {
-          target.scrollIntoView({ behavior: 'auto', block: 'start' });
-        });
-      }
-    }
-
-    function buildOutline() {
-      outlineEl.innerHTML = '';
-      const headings = contentEl.querySelectorAll('.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6');
-      if (headings.length === 0) {
-        outlineEl.innerHTML = '<div class="empty">No headings</div>';
-        return;
-      }
-
-      const ul = document.createElement('ul');
-      for (const h of headings) {
-        const level = parseInt(h.tagName[1], 10);
-        const text = h.textContent || '';
-        const id = h.id;
-        const li = document.createElement('li');
-        const node = document.createElement('div');
-        node.className = 'outline-node';
-        node.dataset.level = level;
-        node.dataset.target = id;
-        node.title = text;
-        node.textContent = text;
-        node.addEventListener('click', () => {
-          document.querySelectorAll('.outline-node').forEach((el) => {
-            el.classList.toggle('active', el === node);
-          });
-          ignoreScrollSpy = true;
-          h.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          history.replaceState(null, '', `#${id}`);
-          setTimeout(() => { ignoreScrollSpy = false; updateOutlineActive(); }, 1200);
-        });
-        li.appendChild(node);
-        ul.appendChild(li);
-      }
-      outlineEl.appendChild(ul);
-    }
-
-    function updateActive(filePath) {
-      document.querySelectorAll('.tree-node').forEach((el) => {
-        el.classList.toggle('active', el.dataset.path === filePath);
-      });
-    }
-
-    function updateOutlineActive() {
-      if (ignoreScrollSpy) return;
-      const headings = [...contentEl.querySelectorAll('.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6')];
-      if (headings.length === 0) return;
-
-      let currentId = null;
-      const nearBottom = contentEl.scrollHeight - contentEl.scrollTop - contentEl.clientHeight < 80;
-
-      if (nearBottom) {
-        currentId = headings[headings.length - 1].id;
-      } else {
-        for (const h of headings) {
-          const rect = h.getBoundingClientRect();
-          if (rect.top <= 80) {
-            currentId = h.id;
-          } else {
-            break;
-          }
-        }
-      }
-
-      if (!currentId) currentId = headings[0].id;
-
-      document.querySelectorAll('.outline-node').forEach((el) => {
-        el.classList.toggle('active', el.dataset.target === currentId);
-      });
-    }
-
-    contentEl.addEventListener('scroll', () => {
-      window.requestAnimationFrame(updateOutlineActive);
-    }, { passive: true });
-
-    function escapeHtml(str) {
-      return String(str).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    }
-
-    function formatBytes(bytes) {
-      if (bytes === 0) return '0 B';
-      const k = 1024;
-      const sizes = ['B', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
-    }
-
-    const params = new URLSearchParams(location.search);
-    requestedFile = params.get('file') || initialFile;
-    loadTree();
-
-    // Auto-refresh the current file every 5 seconds to reflect local changes.
-    setInterval(() => {
-      if (currentPath) openFile(currentPath, true);
-    }, 5000);
-
-    // Restore sidebar width from localStorage.
-    (function restoreSidebarWidth() {
-      const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-      if (saved) {
-        const width = parseInt(saved, 10);
-        if (width >= 180 && width <= window.innerWidth * 0.5) {
-          leftSidebar.style.width = `${width}px`;
-        }
-      }
-    })();
-
-    // Drag to resize left sidebar.
-    (function setupResize() {
-      if (!resizeHandle) return;
-      let startX = 0;
-      let startWidth = 0;
-
-      resizeHandle.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        startX = e.clientX;
-        startWidth = leftSidebar.offsetWidth;
-        resizeHandle.classList.add('resizing');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-
-        const onMouseMove = (ev) => {
-          const delta = ev.clientX - startX;
-          const newWidth = Math.max(180, Math.min(window.innerWidth * 0.5, startWidth + delta));
-          leftSidebar.style.width = `${newWidth}px`;
-        };
-
-        const onMouseUp = (ev) => {
-          const delta = ev.clientX - startX;
-          const newWidth = Math.max(180, Math.min(window.innerWidth * 0.5, startWidth + delta));
-          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(newWidth));
-          resizeHandle.classList.remove('resizing');
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-          document.removeEventListener('mousemove', onMouseMove);
-          document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-      });
-    })();
-
-    // Notify the server when this tab opens/closes so the background process
-    // can shut down once no tabs are active.
-    (function setupTabLifecycle() {
-      const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const pingIntervalMs = 30 * 1000;
-
-      function post(endpoint, body) {
-        return fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          keepalive: true,
-        }).catch(() => {});
-      }
-
-      function beacon(endpoint, body) {
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(endpoint, new Blob([JSON.stringify(body)], { type: 'application/json' }));
-        } else {
-          post(endpoint, body);
-        }
-      }
-
-      post('/api/open', { tabId });
-      const pingTimer = setInterval(() => post('/api/ping', { tabId }), pingIntervalMs);
-
-      window.__viewTabId = tabId;
-
-      function onUnload() {
-        clearInterval(pingTimer);
-        beacon('/api/close', { tabId });
-      }
-
-      window.addEventListener('beforeunload', onUnload);
-      window.addEventListener('pagehide', onUnload);
-    })();
-  </script>
+  <script>{{APP_SCRIPT}}</script>
 </body>
 </html>

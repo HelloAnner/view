@@ -3,8 +3,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import hljs from 'highlight.js';
 import type { PreviewOptions, TreeNode } from './types.ts';
+import {
+  classifyFile,
+  classifyFileName,
+  formatBytes,
+  getContentType,
+  languageForFile,
+  MAX_TEXT_PREVIEW_BYTES,
+  readTextPreview,
+  supportsSourceView,
+} from './file-types.ts';
 import { renderMarkdown } from './markdown.ts';
 import template from './assets/app.html' with { type: 'text' };
+import appStyles from './assets/app.css' with { type: 'text' };
+import appScript from './assets/app.js' with { type: 'text' };
 
 const IGNORED_NAMES = new Set([
   '.git',
@@ -13,84 +25,6 @@ const IGNORED_NAMES = new Set([
   'dist',
   'coverage',
 ]);
-
-const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.mdx']);
-
-const IMAGE_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico', '.avif',
-]);
-
-const HTML_EXTENSIONS = new Set(['.html', '.htm']);
-
-const CODE_EXTENSION_MAP: Record<string, string> = {
-  '.ts': 'typescript',
-  '.tsx': 'tsx',
-  '.js': 'javascript',
-  '.jsx': 'jsx',
-  '.mjs': 'javascript',
-  '.cjs': 'javascript',
-  '.json': 'json',
-  '.html': 'html',
-  '.xml': 'xml',
-  '.css': 'css',
-  '.scss': 'scss',
-  '.sass': 'sass',
-  '.less': 'less',
-  '.py': 'python',
-  '.java': 'java',
-  '.c': 'c',
-  '.cpp': 'cpp',
-  '.cc': 'cpp',
-  '.h': 'c',
-  '.hpp': 'cpp',
-  '.rs': 'rust',
-  '.go': 'go',
-  '.rb': 'ruby',
-  '.php': 'php',
-  '.sh': 'bash',
-  '.bash': 'bash',
-  '.zsh': 'zsh',
-  '.yaml': 'yaml',
-  '.yml': 'yaml',
-  '.toml': 'toml',
-  '.sql': 'sql',
-  '.swift': 'swift',
-  '.kt': 'kotlin',
-  '.kts': 'kotlin',
-  '.vue': 'xml',
-  '.svelte': 'xml',
-  '.dart': 'dart',
-  '.lua': 'lua',
-  '.r': 'r',
-  '.pl': 'perl',
-  '.perl': 'perl',
-  '.dockerfile': 'dockerfile',
-  '.ini': 'ini',
-  '.cfg': 'ini',
-  '.conf': 'ini',
-  '.makefile': 'makefile',
-  '.mk': 'makefile',
-};
-
-function isMarkdown(filePath: string): boolean {
-  return MARKDOWN_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-}
-
-function isImage(filePath: string): boolean {
-  return IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-}
-
-function isPdf(filePath: string): boolean {
-  return path.extname(filePath).toLowerCase() === '.pdf';
-}
-
-function isHtml(filePath: string): boolean {
-  return HTML_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-}
-
-function isCode(filePath: string): boolean {
-  return path.extname(filePath).toLowerCase() in CODE_EXTENSION_MAP;
-}
 
 function resolveSafePath(root: string, raw: string): string {
   const target = path.resolve(root, path.normalize(raw));
@@ -101,64 +35,128 @@ function resolveSafePath(root: string, raw: string): string {
   return target;
 }
 
-function buildTree(root: string, current: string): TreeNode {
+function shouldIgnoreName(name: string): boolean {
+  return IGNORED_NAMES.has(name) || name.startsWith('.');
+}
+
+function buildDirectoryNode(root: string, current: string): TreeNode {
   const stat = fs.statSync(current);
   const relative = path.relative(root, current) || '.';
 
-  if (stat.isDirectory()) {
-    const children: TreeNode[] = fs
-      .readdirSync(current)
-      .filter((name) => !IGNORED_NAMES.has(name) && !name.startsWith('.'))
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => buildTree(root, path.join(current, name)))
-      .sort((a, b) => {
-        if (a.type === b.type) return a.name.localeCompare(b.name);
-        return a.type === 'directory' ? -1 : 1;
-      });
-
-    return {
-      name: path.basename(current),
-      path: relative,
-      type: 'directory',
-      children,
-    };
+  if (!stat.isDirectory()) {
+    throw new Error('Not a directory');
   }
 
   return {
     name: path.basename(current),
     path: relative,
-    type: 'file',
+    type: 'directory',
+    children: listDirectory(root, current),
+    hasChildren: true,
+    loaded: true,
   };
 }
 
-function getContentType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  const map: Record<string, string> = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.webp': 'image/webp',
-    '.bmp': 'image/bmp',
-    '.ico': 'image/x-icon',
-    '.avif': 'image/avif',
-    '.pdf': 'application/pdf',
-    '.json': 'application/json',
-    '.js': 'text/javascript',
-    '.css': 'text/css',
-    '.html': 'text/html',
-    '.txt': 'text/plain',
-  };
-  return map[ext] || 'application/octet-stream';
+function listDirectory(root: string, current: string): TreeNode[] {
+  const children: TreeNode[] = [];
+
+  for (const dirent of fs.readdirSync(current, { withFileTypes: true })) {
+    if (shouldIgnoreName(dirent.name)) continue;
+
+    const absolute = path.join(current, dirent.name);
+    const relative = path.relative(root, absolute) || '.';
+
+    if (dirent.isDirectory()) {
+      children.push({
+        name: dirent.name,
+        path: relative,
+        type: 'directory',
+        hasChildren: true,
+        loaded: false,
+      });
+      continue;
+    }
+
+    if (dirent.isFile()) {
+      children.push({
+        name: dirent.name,
+        path: relative,
+        type: 'file',
+        previewType: classifyFileName(absolute).type,
+      });
+    }
+  }
+
+  return children.sort((a, b) => {
+    if (a.type === b.type) return a.name.localeCompare(b.name);
+    return a.type === 'directory' ? -1 : 1;
+  });
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
+function searchFiles(root: string, query: string, limit = 200): {
+  results: TreeNode[];
+  truncated: boolean;
+} {
+  const normalizedQuery = query.trim().toLowerCase();
+  const results: TreeNode[] = [];
+  let truncated = false;
+
+  function walk(current: string) {
+    if (results.length >= limit) {
+      truncated = true;
+      return;
+    }
+
+    let dirents: fs.Dirent[];
+    try {
+      dirents = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    dirents.sort((a, b) => {
+      if (a.isDirectory() === b.isDirectory()) return a.name.localeCompare(b.name);
+      return a.isDirectory() ? -1 : 1;
+    });
+
+    for (const dirent of dirents) {
+      if (shouldIgnoreName(dirent.name)) continue;
+      if (results.length >= limit) {
+        truncated = true;
+        return;
+      }
+
+      const absolute = path.join(current, dirent.name);
+      const relative = path.relative(root, absolute);
+
+      if (dirent.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+
+      if (!dirent.isFile()) continue;
+
+      if (
+        dirent.name.toLowerCase().includes(normalizedQuery) ||
+        relative.toLowerCase().includes(normalizedQuery)
+      ) {
+        results.push({
+          name: dirent.name,
+          path: relative,
+          type: 'file',
+          previewType: classifyFileName(absolute).type,
+        });
+      }
+    }
+  }
+
+  if (normalizedQuery) walk(root);
+
+  return { results, truncated };
+}
+
+function fileVersion(stat: fs.Stats): string {
+  return `${stat.mtimeMs.toFixed(3)}:${stat.size}`;
 }
 
 function guessInitialFile(root: string): string | null {
@@ -175,22 +173,45 @@ const TAB_PING_TIMEOUT_MS = 60 * 1000;
 const TAB_CHECK_INTERVAL_MS = 10 * 1000;
 
 export async function startServer(options: PreviewOptions): Promise<{
-  server: Server;
+  server: Server<unknown>;
   url: string;
 }> {
-  const initialFile = guessInitialFile(options.root);
-  const tree = buildTree(options.root, options.root);
+  const initialFile = options.initialFile
+    ? path.resolve(options.root, options.initialFile)
+    : guessInitialFile(options.root);
 
   const tabs = new Map<string, number>();
   let hasHadTab = false;
+  let server: Server<unknown>;
+  let idleShutdownTimer: ReturnType<typeof setTimeout> | null = null;
+  let shutdownStarted = false;
 
   function shutdownServer() {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+    clearTimeout(lifetimeTimer);
+    clearInterval(checkTimer);
+    if (idleShutdownTimer) clearTimeout(idleShutdownTimer);
     try {
       server.stop();
     } catch {
       // ignore
     }
     process.exit(0);
+  }
+
+  function scheduleIdleShutdown(delayMs = 750) {
+    if (!hasHadTab || tabs.size > 0 || idleShutdownTimer) return;
+    idleShutdownTimer = setTimeout(() => {
+      idleShutdownTimer = null;
+      if (hasHadTab && tabs.size === 0) shutdownServer();
+    }, delayMs);
+  }
+
+  function cancelIdleShutdown() {
+    if (!idleShutdownTimer) return;
+    clearTimeout(idleShutdownTimer);
+    idleShutdownTimer = null;
   }
 
   const lifetimeTimer = setTimeout(() => {
@@ -206,9 +227,7 @@ export async function startServer(options: PreviewOptions): Promise<{
       }
     }
     if (hasHadTab && tabs.size === 0) {
-      clearTimeout(lifetimeTimer);
-      clearInterval(checkTimer);
-      shutdownServer();
+      scheduleIdleShutdown();
     }
   }, TAB_CHECK_INTERVAL_MS);
 
@@ -221,7 +240,7 @@ export async function startServer(options: PreviewOptions): Promise<{
     }
   }
 
-  const server = Bun.serve({
+  server = Bun.serve({
     port: options.port,
     hostname: '127.0.0.1',
     async fetch(req) {
@@ -232,12 +251,15 @@ export async function startServer(options: PreviewOptions): Promise<{
 
       try {
         if (pathname === '/') {
-          const html = template
-            .replace('{{ROOT}}', JSON.stringify(options.root))
-            .replace(
-              '{{INITIAL_FILE}}',
-              JSON.stringify(initialFile ? path.relative(options.root, initialFile) : null)
-            );
+          const html = (template as unknown as string)
+            .replace('{{APP_CSS}}', appStyles as unknown as string)
+            .replace('{{APP_SCRIPT}}', appScript as unknown as string)
+            .replace('{{APP_CONTEXT}}', JSON.stringify({
+              rootName: path.basename(options.root),
+              rootPath: options.root,
+              launchMode: options.launchMode,
+              initialFile: initialFile ? path.relative(options.root, initialFile) : null,
+            }));
           return new Response(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8', ...noCache },
           });
@@ -248,7 +270,18 @@ export async function startServer(options: PreviewOptions): Promise<{
         }
 
         if (pathname === '/api/tree') {
-          return Response.json(tree, { headers: noCache });
+          const raw = url.searchParams.get('path') || '.';
+          const target = resolveSafePath(options.root, raw);
+          const stat = fs.statSync(target);
+          if (!stat.isDirectory()) {
+            return new Response('Not a directory', { status: 400, headers: noCache });
+          }
+          return Response.json(buildDirectoryNode(options.root, target), { headers: noCache });
+        }
+
+        if (pathname === '/api/search') {
+          const query = url.searchParams.get('q') || '';
+          return Response.json(searchFiles(options.root, query), { headers: noCache });
         }
 
         if (pathname.startsWith('/files/')) {
@@ -263,12 +296,41 @@ export async function startServer(options: PreviewOptions): Promise<{
           });
         }
 
+        if (pathname.startsWith('/preview-html/')) {
+          const raw = decodeURIComponent(pathname.slice('/preview-html/'.length));
+          if (!raw) return new Response('Missing path', { status: 400, headers: noCache });
+          const target = resolveSafePath(options.root, raw);
+          const stat = fs.statSync(target);
+          if (!stat.isFile()) return new Response('Not a file', { status: 400, headers: noCache });
+          const contentType = getContentType(target);
+          const headers: Record<string, string> = {
+            'Content-Type': contentType,
+            'X-Content-Type-Options': 'nosniff',
+            ...noCache,
+          };
+          if (contentType.startsWith('text/html')) {
+            headers['Content-Security-Policy'] = [
+              'sandbox allow-scripts allow-forms allow-popups',
+              "default-src 'self' data: blob: https: http:",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:",
+              "style-src 'self' 'unsafe-inline' data: blob: https: http:",
+              "img-src 'self' data: blob: https: http:",
+              "font-src 'self' data: blob: https: http:",
+              "connect-src 'self' https: http: ws: wss:",
+              "object-src 'none'",
+              "base-uri 'none'",
+            ].join('; ');
+          }
+          return new Response(Bun.file(target), { headers });
+        }
+
         if (pathname === '/api/open' && req.method === 'POST') {
           const body = await readJsonBody(req);
           const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
           if (tabId) {
             tabs.set(tabId, Date.now());
             hasHadTab = true;
+            cancelIdleShutdown();
           }
           return new Response('ok', { headers: noCache });
         }
@@ -276,7 +338,10 @@ export async function startServer(options: PreviewOptions): Promise<{
         if (pathname === '/api/ping' && req.method === 'POST') {
           const body = await readJsonBody(req);
           const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
-          if (tabId) tabs.set(tabId, Date.now());
+          if (tabId) {
+            tabs.set(tabId, Date.now());
+            cancelIdleShutdown();
+          }
           return new Response('ok', { headers: noCache });
         }
 
@@ -284,9 +349,7 @@ export async function startServer(options: PreviewOptions): Promise<{
           const body = await readJsonBody(req);
           const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
           if (tabId) tabs.delete(tabId);
-          // Do not stop immediately; the periodic check will shut down after a
-          // short grace period. This prevents killing the server when a tab
-          // navigates to another file (close fires before the next open).
+          scheduleIdleShutdown();
           return new Response('ok', { headers: noCache });
         }
 
@@ -302,23 +365,6 @@ export async function startServer(options: PreviewOptions): Promise<{
           });
         }
 
-        if (pathname === '/api/render') {
-          const raw = url.searchParams.get('path');
-          if (!raw) return new Response('Missing path', { status: 400, headers: noCache });
-          const target = resolveSafePath(options.root, raw);
-          const stat = fs.statSync(target);
-          if (!stat.isFile()) return new Response('Not a file', { status: 400, headers: noCache });
-
-          if (!isMarkdown(target)) {
-            return new Response('Not a Markdown file', { status: 400, headers: noCache });
-          }
-
-          const content = await fs.promises.readFile(target, 'utf-8');
-          const relativeTarget = path.relative(options.root, target);
-          const result = renderMarkdown(content, relativeTarget);
-          return Response.json(result, { headers: noCache });
-        }
-
         if (pathname === '/api/preview') {
           const raw = url.searchParams.get('path');
           if (!raw) return new Response('Missing path', { status: 400, headers: noCache });
@@ -327,54 +373,112 @@ export async function startServer(options: PreviewOptions): Promise<{
           if (!stat.isFile()) return new Response('Not a file', { status: 400, headers: noCache });
 
           const relativePath = path.relative(options.root, target);
-          const fileUrl = `/api/file?path=${encodeURIComponent(relativePath)}`;
-
-          if (isImage(target)) {
-            return Response.json(
-              { type: 'image', url: fileUrl, title: path.basename(target), size: stat.size },
-              { headers: noCache }
-            );
+          const version = fileVersion(stat);
+          const requestedVersion = url.searchParams.get('version');
+          if (requestedVersion === version) {
+            return new Response(null, { status: 304, headers: noCache });
           }
 
-          if (isPdf(target)) {
-            return Response.json(
-              { type: 'pdf', url: fileUrl, title: path.basename(target), size: stat.size },
-              { headers: noCache }
-            );
+          const classification = await classifyFile(target, stat.size);
+          const sourceCapable = supportsSourceView(target, classification);
+          const requestedView = url.searchParams.get('view') === 'source' ? 'source' : 'preview';
+          let selectedView = classification.type === 'code'
+            ? 'source'
+            : requestedView === 'source' && sourceCapable ? 'source' : 'preview';
+          let forcedSource = false;
+          const views = classification.type === 'code'
+            ? ['source']
+            : sourceCapable ? ['preview', 'source'] : ['preview'];
+          const fileUrl = `/api/file?path=${encodeURIComponent(relativePath)}&v=${encodeURIComponent(version)}`;
+          const base = {
+            fileType: classification.type,
+            title: path.basename(target),
+            path: relativePath,
+            size: stat.size,
+            readableSize: formatBytes(stat.size),
+            mime: getContentType(target),
+            modifiedAt: stat.mtime.toISOString(),
+            version,
+            views,
+          };
+
+          let textPreview: Awaited<ReturnType<typeof readTextPreview>> | null = null;
+          if (selectedView === 'source' || classification.type === 'code' || classification.type === 'markdown') {
+            textPreview = await readTextPreview(target, stat.size);
           }
 
-          if (isHtml(target)) {
+          if (
+            classification.type === 'markdown'
+            && selectedView === 'preview'
+            && (stat.size > MAX_TEXT_PREVIEW_BYTES || textPreview?.truncated)
+          ) {
+            selectedView = 'source';
+            forcedSource = true;
+          }
+
+          if (selectedView === 'source' || classification.type === 'code') {
+            textPreview ||= await readTextPreview(target, stat.size);
+            const language = languageForFile(target) || classification.language || 'plaintext';
+            const highlighted = hljs.getLanguage(language)
+              ? hljs.highlight(textPreview.content, { language }).value
+              : hljs.highlightAuto(textPreview.content).value;
             return Response.json(
               {
-                type: 'html',
-                url: `/files/${relativePath.split('/').map(encodeURIComponent).join('/')}`,
-                title: path.basename(target),
-                size: stat.size,
+                ...base,
+                views: forcedSource ? ['source'] : base.views,
+                type: 'code',
+                view: 'source',
+                html: highlighted,
+                content: textPreview.content,
+                language,
+                lineCount: textPreview.lineCount,
+                encoding: 'UTF-8',
+                truncated: textPreview.truncated,
+                forcedSource,
               },
               { headers: noCache }
             );
           }
 
-          if (isCode(target)) {
-            const content = await fs.promises.readFile(target, 'utf-8');
-            const ext = path.extname(target).toLowerCase();
-            const language = CODE_EXTENSION_MAP[ext] || 'plaintext';
-            const highlighted = hljs.getLanguage(language)
-              ? hljs.highlight(content, { language }).value
-              : hljs.highlightAuto(content).value;
+          if (classification.type === 'markdown') {
+            const result = renderMarkdown(textPreview?.content || '', relativePath);
             return Response.json(
-              { type: 'code', html: highlighted, language, title: path.basename(target), size: stat.size },
+              { ...base, type: 'markdown', view: 'preview', html: result.html, documentTitle: result.title },
+              { headers: noCache }
+            );
+          }
+
+          if (classification.type === 'image') {
+            return Response.json(
+              { ...base, type: 'image', view: 'preview', url: fileUrl },
+              { headers: noCache }
+            );
+          }
+
+          if (classification.type === 'pdf') {
+            return Response.json(
+              { ...base, type: 'pdf', view: 'preview', url: fileUrl },
+              { headers: noCache }
+            );
+          }
+
+          if (classification.type === 'html') {
+            return Response.json(
+              {
+                ...base,
+                type: 'html',
+                view: 'preview',
+                url: `/preview-html/${relativePath.split('/').map(encodeURIComponent).join('/')}?v=${encodeURIComponent(version)}`,
+              },
               { headers: noCache }
             );
           }
 
           return Response.json(
             {
+              ...base,
               type: 'binary',
-              title: path.basename(target),
-              mime: getContentType(target),
-              size: stat.size,
-              readableSize: formatBytes(stat.size),
+              view: 'preview',
               url: fileUrl,
             },
             { headers: noCache }

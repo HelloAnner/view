@@ -20,7 +20,7 @@ if (
 
 program
   .name('v')
-  .description('Preview Markdown files and directories in the browser')
+  .description('Preview local files and directories in a read-only browser workspace')
   .version('0.1.0')
   .argument('[path]', 'file or directory to preview', '.')
   .option('-p, --port <number>', 'server port', '0')
@@ -80,6 +80,8 @@ async function main() {
   if (fs.statSync(resolved).isFile()) {
     const options: PreviewOptions = {
       root: path.dirname(resolved),
+      launchMode: 'file',
+      initialFile: path.basename(resolved),
       ...baseOptions,
     };
     const { url } = await startServer(options);
@@ -89,6 +91,7 @@ async function main() {
   } else {
     const options: PreviewOptions = {
       root: resolved,
+      launchMode: 'directory',
       ...baseOptions,
     };
     const { url } = await startServer(options);

@@ -29,16 +29,39 @@ export function renderMarkdown(source: string, filePath: string): RenderResult {
 
   const renderer = new marked.Renderer();
   const originalImage = renderer.image;
+  const originalLink = renderer.link;
 
-  renderer.image = ({ href, title, text }) => {
-    if (!href) return originalImage.call(renderer, { href, title, text });
+  renderer.image = (token) => {
+    const { href } = token;
+    if (!href) return originalImage.call(renderer, token);
 
     let resolved = href;
-    if (!/^https?:\/\//i.test(href) && !href.startsWith('/api/file?path=')) {
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('/api/file?path=')) {
       resolved = '/api/file?path=' + encodeURIComponent(path.join(dir, href));
     }
 
-    return originalImage.call(renderer, { href: resolved, title, text });
+    return originalImage.call(renderer, { ...token, href: resolved });
+  };
+
+  renderer.link = (token) => {
+    const { href } = token;
+    if (
+      !href
+      || href.startsWith('#')
+      || href.startsWith('/api/')
+      || /^[a-z][a-z0-9+.-]*:/i.test(href)
+    ) {
+      return originalLink.call(renderer, token);
+    }
+
+    const hashIndex = href.indexOf('#');
+    const filePart = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+    const hash = hashIndex >= 0 ? href.slice(hashIndex + 1) : '';
+    const resolved = path.normalize(filePart.startsWith('/')
+      ? filePart.slice(1)
+      : path.join(dir, filePart));
+    const localHref = `/?file=${encodeURIComponent(resolved)}${hash ? `#${encodeURIComponent(hash)}` : ''}`;
+    return originalLink.call(renderer, { ...token, href: localHref });
   };
 
   renderer.heading = function ({ tokens, depth }) {
