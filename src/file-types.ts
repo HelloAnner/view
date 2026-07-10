@@ -104,13 +104,6 @@ export async function classifyFile(filePath: string, size: number): Promise<File
   return named;
 }
 
-export function supportsSourceView(filePath: string, classification: FileClassification): boolean {
-  return classification.type === 'markdown'
-    || classification.type === 'html'
-    || classification.type === 'code'
-    || path.extname(filePath).toLowerCase() === '.svg';
-}
-
 export async function readTextPreview(filePath: string, size: number): Promise<TextPreview> {
   const bytesToRead = Math.min(size, MAX_TEXT_PREVIEW_BYTES + 4);
   const handle = await fs.promises.open(filePath, 'r');

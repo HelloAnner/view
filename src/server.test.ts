@@ -7,7 +7,6 @@ import {
   classifyFileName,
   MAX_TEXT_PREVIEW_LINES,
   readTextPreview,
-  supportsSourceView,
 } from './file-types.ts';
 
 const temporaryDirectories: string[] = [];
@@ -30,8 +29,6 @@ describe('file classification', () => {
     expect(classifyFileName('Dockerfile')).toEqual({ type: 'code', language: 'dockerfile' });
     expect(classifyFileName('bun.lock')).toEqual({ type: 'code', language: 'toml' });
     expect(classifyFileName('.env.local')).toEqual({ type: 'code', language: 'bash' });
-    expect(supportsSourceView('diagram.svg', classifyFileName('diagram.svg'))).toBe(true);
-    expect(supportsSourceView('photo.webp', classifyFileName('photo.webp'))).toBe(false);
   });
 
   test('treats unknown readable files as plaintext and preserves binary files', async () => {

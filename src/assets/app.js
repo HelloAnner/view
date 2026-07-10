@@ -12,8 +12,7 @@ let initialHash = readLocationHash();
 let toastTimer = 0;
 let focusedTreePath = '';
 let lastPanelFocus = null;
-let imageResizeObserver = null;
-let imageState = { scale: 1, panX: 0, panY: 0, mode: 'fit', width: 0, height: 0 };
+let activeViewProvider = null;
 const viewerStateCache = new Map();
 
 const appEl = document.getElementById('app');
@@ -50,7 +49,6 @@ let searchAbortController = null;
 const expandedDirs = new Set();
 const loadedDirs = new Map();
 const SIDEBAR_WIDTH_KEY = 'view-sidebar-width';
-const CODE_WRAP_KEY = 'view-code-wrap';
 
 const fileIcon = `<svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
 const folderIcon = `<svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
@@ -179,6 +177,11 @@ function syncScrim() {
 }
 
 function updateExplorerButton() {
+  if (appContext.launchMode === 'file') {
+    explorerBtn.setAttribute('aria-expanded', 'false');
+    explorerBtn.classList.remove('is-active');
+    return;
+  }
   const expanded = window.innerWidth <= 768
     ? leftSidebar.classList.contains('open')
     : !appEl.classList.contains('explorer-hidden');
@@ -200,6 +203,7 @@ function restorePanelFocus(fallback) {
 }
 
 function toggleExplorer(force) {
+  if (appContext.launchMode === 'file') return;
   if (window.innerWidth <= 768) {
     const shouldOpen = force ?? !leftSidebar.classList.contains('open');
     if (shouldOpen) lastPanelFocus = leftSidebar.contains(document.activeElement) ? explorerBtn : document.activeElement;
@@ -250,14 +254,6 @@ function closeOverlayPanels() {
   if (explorerHadFocus || outlineHadFocus) restorePanelFocus(explorerHadFocus ? explorerBtn : outlineBtn);
 }
 
-function setCodeWrap(enabled) {
-  const grid = contentEl.querySelector('.code-grid');
-  grid?.classList.toggle('is-wrapped', enabled);
-  wrapBtn.classList.toggle('is-active', enabled);
-  wrapBtn.setAttribute('aria-pressed', String(enabled));
-  localStorage.setItem(CODE_WRAP_KEY, String(enabled));
-}
-
 explorerBtn.addEventListener('click', () => toggleExplorer());
 collapseExplorerBtn.addEventListener('click', () => toggleExplorer(false));
 panelScrim.addEventListener('click', closeOverlayPanels);
@@ -268,7 +264,7 @@ outlineBtn.addEventListener('click', () => {
   if (isOpen) closeOutlinePanel(); else revealOutlinePanel();
 });
 outlineCloseBtn.addEventListener('click', () => closeOutlinePanel());
-wrapBtn.addEventListener('click', () => setCodeWrap(wrapBtn.getAttribute('aria-pressed') !== 'true'));
+wrapBtn.addEventListener('click', () => activeViewProvider?.toggleWrap?.());
 copyPathBtn.addEventListener('click', () => {
   if (currentPath) copyText(currentPath, 'Relative path copied');
 });
@@ -610,7 +606,7 @@ function snapshotViewerState() {
     codeTop: codeScroll?.scrollTop || 0,
     codeLeft: codeScroll?.scrollLeft || 0,
     hash: readLocationHash(),
-    image: contentEl.querySelector('.image-workbench') ? { ...imageState } : null,
+    provider: activeViewProvider?.captureState?.() || null,
   };
 }
 
@@ -629,308 +625,33 @@ function restoreViewerState(state) {
       codeScroll.scrollTop = state.codeTop;
       codeScroll.scrollLeft = state.codeLeft;
     }
-    if (state.hash?.startsWith('L')) selectCodeLine(state.hash, false);
-    if (state.image) {
-      const image = contentEl.querySelector('.image-canvas img');
-      if (image?.complete) applyImageState(state.image);
-      else image?.addEventListener('load', () => applyImageState(state.image), { once: true });
-    }
+    if (state.hash?.startsWith('L')) activeViewProvider?.revealHash?.(state.hash, false);
+    activeViewProvider?.restoreState?.(state.provider);
   });
 }
 
-function sanitizeMarkdownHtml(html) {
-  const template = document.createElement('template');
-  template.innerHTML = html;
-  const blockedTags = new Set([
-    'script', 'style', 'iframe', 'object', 'embed', 'meta', 'link', 'base',
-    'form', 'textarea', 'select', 'option', 'button', 'svg', 'math',
-  ]);
-
-  for (const element of [...template.content.querySelectorAll('*')]) {
-    const tag = element.tagName.toLowerCase();
-    if (blockedTags.has(tag)) {
-      element.remove();
-      continue;
-    }
-    if (tag === 'input' && !(element.type === 'checkbox' && element.disabled)) {
-      element.remove();
-      continue;
-    }
-
-    for (const attribute of [...element.attributes]) {
-      const name = attribute.name.toLowerCase();
-      const value = attribute.value.trim();
-      if (name.startsWith('on') || ['style', 'srcdoc', 'formaction'].includes(name)) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-      if (['href', 'src', 'xlink:href'].includes(name)) {
-        const isSafeDataImage = name === 'src' && /^data:image\/(png|gif|jpeg|webp|avif);/i.test(value);
-        const hasUnsafeScheme = /^(javascript|vbscript|data):/i.test(value);
-        if (hasUnsafeScheme && !isSafeDataImage) element.removeAttribute(attribute.name);
-      }
-    }
-
-    if (tag === 'a') {
-      const href = element.getAttribute('href') || '';
-      if (/^https?:\/\//i.test(href)) {
-        element.setAttribute('target', '_blank');
-        element.setAttribute('rel', 'noopener noreferrer');
-      }
-    }
-  }
-  return template.innerHTML;
-}
-
-function clamp(value, minimum, maximum) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function updateImageTransform() {
-  const canvas = contentEl.querySelector('.image-canvas');
-  const image = canvas?.querySelector('img');
-  if (!canvas || !image) return;
-  image.style.setProperty('--image-scale', String(imageState.scale));
-  image.style.setProperty('--pan-x', `${imageState.panX}px`);
-  image.style.setProperty('--pan-y', `${imageState.panY}px`);
-  const zoomLabel = contentEl.querySelector('.image-zoom');
-  if (zoomLabel) zoomLabel.textContent = `${Math.round(imageState.scale * 100)}%`;
-  contentEl.querySelector('[data-image-action="fit"]')?.classList.toggle('is-active', imageState.mode === 'fit');
-  contentEl.querySelector('[data-image-action="actual"]')?.classList.toggle('is-active', imageState.mode === 'actual');
-}
-
-function applyImageState(nextState) {
-  imageState = { ...imageState, ...nextState };
-  updateImageTransform();
-}
-
-function fitImage() {
-  const canvas = contentEl.querySelector('.image-canvas');
-  const image = canvas?.querySelector('img');
-  if (!canvas || !image?.naturalWidth || !image?.naturalHeight) return;
-  const availableWidth = Math.max(1, canvas.clientWidth - 56);
-  const availableHeight = Math.max(1, canvas.clientHeight - 56);
-  imageState = {
-    ...imageState,
-    scale: Math.min(availableWidth / image.naturalWidth, availableHeight / image.naturalHeight, 1),
-    panX: 0,
-    panY: 0,
-    mode: 'fit',
-    width: image.naturalWidth,
-    height: image.naturalHeight,
-  };
-  updateImageTransform();
-}
-
-function setImageZoom(scale, mode = 'custom') {
-  imageState = { ...imageState, scale: clamp(scale, 0.1, 8), mode };
-  updateImageTransform();
-}
-
-function renderImage(data) {
-  clearOutline();
-  setContentMode('media');
-  imageState = { scale: 1, panX: 0, panY: 0, mode: 'fit', width: 0, height: 0 };
-  contentEl.innerHTML = `
-    <div class="image-workbench">
-      <div class="image-canvas" tabindex="0" aria-label="Image canvas">
-        <img src="${escapeHtml(data.url)}" alt="${escapeHtml(data.title)}" draggable="false">
-      </div>
-      <footer class="image-toolbar">
-        <div class="image-controls" role="group" aria-label="Image zoom controls">
-          <button class="image-tool-button" type="button" data-image-action="fit">Fit</button>
-          <button class="image-tool-button" type="button" data-image-action="actual">100%</button>
-          <button class="image-tool-button" type="button" data-image-action="out" aria-label="Zoom out">−</button>
-          <span class="image-zoom">100%</span>
-          <button class="image-tool-button" type="button" data-image-action="in" aria-label="Zoom in">+</button>
-        </div>
-        <span class="image-meta">Loading dimensions… · ${escapeHtml(data.readableSize)}</span>
-      </footer>
-    </div>`;
-
-  const canvas = contentEl.querySelector('.image-canvas');
-  const image = canvas.querySelector('img');
-  const meta = contentEl.querySelector('.image-meta');
-  const onImageLoad = () => {
-    imageState.width = image.naturalWidth;
-    imageState.height = image.naturalHeight;
-    meta.textContent = `${image.naturalWidth.toLocaleString()} × ${image.naturalHeight.toLocaleString()} px · ${data.readableSize}`;
-    fitImage();
-  };
-  if (image.complete && image.naturalWidth) onImageLoad();
-  else image.addEventListener('load', onImageLoad, { once: true });
-
-  contentEl.querySelector('.image-controls').addEventListener('click', (event) => {
-    const action = event.target.closest('[data-image-action]')?.dataset.imageAction;
-    if (action === 'fit') fitImage();
-    if (action === 'actual') setImageZoom(1, 'actual');
-    if (action === 'in') setImageZoom(imageState.scale * 1.25);
-    if (action === 'out') setImageZoom(imageState.scale / 1.25);
-  });
-
-  let dragStart = null;
-  canvas.addEventListener('pointerdown', (event) => {
-    dragStart = { x: event.clientX, y: event.clientY, panX: imageState.panX, panY: imageState.panY };
-    canvas.setPointerCapture(event.pointerId);
-  });
-  canvas.addEventListener('pointermove', (event) => {
-    if (!dragStart) return;
-    imageState.panX = dragStart.panX + event.clientX - dragStart.x;
-    imageState.panY = dragStart.panY + event.clientY - dragStart.y;
-    imageState.mode = 'custom';
-    updateImageTransform();
-  });
-  canvas.addEventListener('pointerup', () => { dragStart = null; });
-  canvas.addEventListener('pointercancel', () => { dragStart = null; });
-  canvas.addEventListener('wheel', (event) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    setImageZoom(imageState.scale * Math.exp(-event.deltaY * 0.002));
-  }, { passive: false });
-  canvas.addEventListener('keydown', (event) => {
-    if (event.key === '+' || event.key === '=') setImageZoom(imageState.scale * 1.25);
-    else if (event.key === '-') setImageZoom(imageState.scale / 1.25);
-    else if (event.key === '0') setImageZoom(1, 'actual');
-    else if (event.key.toLowerCase() === 'f') fitImage();
-    else return;
-    event.preventDefault();
-  });
-
-  imageResizeObserver?.disconnect();
-  imageResizeObserver = new ResizeObserver(() => {
-    if (imageState.mode === 'fit') fitImage();
-  });
-  imageResizeObserver.observe(canvas);
-}
-
-function highlightedLines(html) {
-  const source = document.createElement('div');
-  source.innerHTML = html;
-  const lines = [document.createElement('span')];
-
-  function appendText(text, ancestors) {
-    const chunks = text.replace(/\r/g, '').split('\n');
-    chunks.forEach((chunk, index) => {
-      if (chunk) {
-        let parent = lines[lines.length - 1];
-        for (const ancestor of ancestors) {
-          const clone = ancestor.cloneNode(false);
-          parent.appendChild(clone);
-          parent = clone;
-        }
-        parent.appendChild(document.createTextNode(chunk));
-      }
-      if (index < chunks.length - 1) lines.push(document.createElement('span'));
-    });
-  }
-
-  function walk(node, ancestors = []) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      appendText(node.textContent || '', ancestors);
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const nextAncestors = [...ancestors, node];
-    node.childNodes.forEach((child) => walk(child, nextAncestors));
-  }
-
-  source.childNodes.forEach((node) => walk(node));
-  return lines.map((line) => line.innerHTML);
-}
-
-function renderCode(data) {
-  const lines = highlightedLines(data.html);
-  const language = escapeHtml(data.language || 'plaintext');
-  const rows = lines.map((line, index) => {
-    const number = index + 1;
-    return `<div class="code-line" id="L${number}" data-line="${number}">
-      <span class="line-number" data-line="${number}" aria-hidden="true">${number}</span>
-      <code class="line-code hljs language-${language}">${line}</code>
-    </div>`;
-  }).join('');
-
-  setContentMode('code');
-  contentEl.innerHTML = `
-    <div class="code-workbench">
-      <div class="code-scroll" tabindex="0" aria-label="Read-only source code">
-        <div class="code-grid">${rows}</div>
-      </div>
-      <footer class="editor-statusbar">
-        <div class="status-group">
-          <span>${escapeHtml(data.language || 'plaintext')}</span>
-          <span>${Number(data.lineCount).toLocaleString()} lines</span>
-          <span class="status-secondary">${escapeHtml(data.encoding || 'UTF-8')}</span>
-        </div>
-        <div class="status-group">
-          <span class="status-secondary">${escapeHtml(data.readableSize)}</span>
-          ${data.truncated ? '<span class="truncated-label">Truncated preview</span>' : ''}
-          <span class="read-only-label">Read only</span>
-        </div>
-      </footer>
-    </div>`;
-
-  setCodeWrap(localStorage.getItem(CODE_WRAP_KEY) === 'true');
-  if (data.truncated) showToast('Large file: showing a truncated source preview');
-  contentEl.querySelector('.code-grid')?.addEventListener('click', (event) => {
-    const link = event.target.closest('.line-number');
-    if (!link) return;
-    event.preventDefault();
-    selectCodeLine(`L${link.dataset.line}`);
-  });
-}
-
-function selectCodeLine(hash, updateLocation = true) {
-  contentEl.querySelectorAll('.code-line.is-target').forEach((line) => line.classList.remove('is-target'));
-  const target = contentEl.querySelector(`#${CSS.escape(hash)}`);
-  target?.classList.add('is-target');
-  if (updateLocation && currentPath) updateFileLocation(currentPath, hash);
-}
+const viewProviders = window.viewProviderRegistry.create({
+  buildOutline,
+  clearOutline,
+  contentEl,
+  escapeHtml,
+  getCurrentPath: () => currentPath,
+  setContentMode,
+  showToast,
+  updateFileLocation,
+  wrapBtn,
+});
 
 function renderPreview(data) {
+  activeViewProvider?.destroy?.();
   currentPreview = data;
   currentView = data.view || (data.type === 'code' ? 'source' : 'preview');
   currentVersion = data.version;
-  if (data.type !== 'image') {
-    imageResizeObserver?.disconnect();
-    imageResizeObserver = null;
-  }
   setFileContext(data.path, data.fileType || data.type);
   setFileActions(data);
   document.title = `${data.title} — view`;
-
-  if (data.type === 'markdown') {
-    setContentMode('document');
-    contentEl.innerHTML = `<article class="markdown-body">${sanitizeMarkdownHtml(data.html)}</article>`;
-    contentEl.querySelectorAll('.markdown-body table').forEach((table) => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'markdown-table-scroll';
-      table.before(wrapper);
-      wrapper.appendChild(table);
-    });
-    buildOutline();
-  } else if (data.type === 'code') {
-    clearOutline();
-    renderCode(data);
-  } else if (data.type === 'image') {
-    renderImage(data);
-  } else if (data.type === 'pdf') {
-    clearOutline();
-    setContentMode('fill');
-    contentEl.innerHTML = `<div class="pdf-preview"><embed src="${escapeHtml(data.url)}" type="application/pdf"></div>`;
-  } else if (data.type === 'html') {
-    clearOutline();
-    setContentMode('fill');
-    contentEl.innerHTML = `<div class="html-preview"><iframe src="${escapeHtml(data.url)}" title="${escapeHtml(data.title)}" sandbox="allow-scripts allow-popups allow-forms" referrerpolicy="no-referrer"></iframe></div>`;
-  } else {
-    clearOutline();
-    setContentMode('document');
-    contentEl.innerHTML = `
-      <div class="binary-preview">
-        <h2>${escapeHtml(data.title)}</h2>
-        <p>${escapeHtml(data.mime)} · ${escapeHtml(data.readableSize)}</p>
-        <a href="${escapeHtml(data.url)}" download>Download file</a>
-      </div>`;
-  }
+  activeViewProvider = viewProviders.get(data.type) || viewProviders.get('binary');
+  activeViewProvider.render(data);
 }
 
 contentEl.addEventListener('click', (event) => {
@@ -988,7 +709,7 @@ async function openFile(
     setContentMode('document');
     contentEl.innerHTML = '<div class="viewer-loading"><div class="loading-lockup"><span class="spinner"></span><span>Opening file…</span></div></div>';
     setRefreshState('loading', 'Opening');
-    if (window.innerWidth <= 768) toggleExplorer(false);
+    if (appContext.launchMode === 'directory' && window.innerWidth <= 768) toggleExplorer(false);
   } else {
     refreshInFlight = true;
     setRefreshState('loading', 'Checking');
@@ -1045,7 +766,7 @@ function restoreHashScroll(hash = readLocationHash()) {
   if (target) {
     requestAnimationFrame(() => {
       target.scrollIntoView({ behavior: 'auto', block: 'start' });
-      if (hash.startsWith('L')) selectCodeLine(hash, false);
+      if (hash.startsWith('L')) activeViewProvider?.revealHash?.(hash, false);
     });
   }
 }
@@ -1191,11 +912,14 @@ document.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Escape' && openPanel) closeOverlayPanels();
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
-    event.preventDefault();
-    toggleExplorer();
+    if (appContext.launchMode === 'directory') {
+      event.preventDefault();
+      toggleExplorer();
+    }
   }
   const targetIsEditable = event.target.matches('input, textarea, select, [contenteditable="true"]');
   if (event.key === '/' && !targetIsEditable && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    if (appContext.launchMode === 'file') return;
     event.preventDefault();
     if (window.innerWidth <= 768 && !leftSidebar.classList.contains('open')) toggleExplorer(true);
     requestAnimationFrame(() => treeSearch.focus());
@@ -1231,11 +955,15 @@ setInterval(() => {
   }
 })();
 
-loadTree();
+if (appContext.launchMode === 'file') {
+  if (requestedFile) openFile(requestedFile, false, requestedView, initialHash, 'replace');
+} else {
+  loadTree();
+}
 
 // Drag to resize left sidebar.
 (function setupResize() {
-  if (!resizeHandle) return;
+  if (!resizeHandle || appContext.launchMode === 'file') return;
   let startX = 0;
   let startWidth = 0;
 

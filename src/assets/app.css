@@ -619,6 +619,11 @@ html, body {
 .skip-link:focus { top: 12px; }
 .app { position: relative; }
 
+.app.launch-file .left-sidebar,
+.app.launch-file #explorerBtn {
+  display: none !important;
+}
+
 .sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);

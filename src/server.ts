@@ -1,22 +1,33 @@
 import type { Server } from 'bun';
 import fs from 'node:fs';
 import path from 'node:path';
-import hljs from 'highlight.js';
 import type { PreviewOptions, TreeNode } from './types.ts';
 import {
   classifyFile,
   classifyFileName,
-  formatBytes,
   getContentType,
-  languageForFile,
-  MAX_TEXT_PREVIEW_BYTES,
-  readTextPreview,
-  supportsSourceView,
 } from './file-types.ts';
-import { renderMarkdown } from './markdown.ts';
+import { renderPreview } from './providers/registry.ts';
 import template from './assets/app.html' with { type: 'text' };
 import appStyles from './assets/app.css' with { type: 'text' };
 import appScript from './assets/app.js' with { type: 'text' };
+import providerRegistry from './assets/providers/registry.js' with { type: 'text' };
+import markdownViewProvider from './assets/providers/markdown.js' with { type: 'text' };
+import codeViewProvider from './assets/providers/code.js' with { type: 'text' };
+import imageViewProvider from './assets/providers/image.js' with { type: 'text' };
+import pdfViewProvider from './assets/providers/pdf.js' with { type: 'text' };
+import htmlViewProvider from './assets/providers/html.js' with { type: 'text' };
+import binaryViewProvider from './assets/providers/binary.js' with { type: 'text' };
+
+const appProviders = [
+  providerRegistry,
+  markdownViewProvider,
+  codeViewProvider,
+  imageViewProvider,
+  pdfViewProvider,
+  htmlViewProvider,
+  binaryViewProvider,
+].join('\n');
 
 const IGNORED_NAMES = new Set([
   '.git',
@@ -253,6 +264,7 @@ export async function startServer(options: PreviewOptions): Promise<{
         if (pathname === '/') {
           const html = (template as unknown as string)
             .replace('{{APP_CSS}}', appStyles as unknown as string)
+            .replace('{{APP_PROVIDERS}}', appProviders as unknown as string)
             .replace('{{APP_SCRIPT}}', appScript as unknown as string)
             .replace('{{APP_CONTEXT}}', JSON.stringify({
               rootName: path.basename(options.root),
@@ -380,109 +392,16 @@ export async function startServer(options: PreviewOptions): Promise<{
           }
 
           const classification = await classifyFile(target, stat.size);
-          const sourceCapable = supportsSourceView(target, classification);
           const requestedView = url.searchParams.get('view') === 'source' ? 'source' : 'preview';
-          let selectedView = classification.type === 'code'
-            ? 'source'
-            : requestedView === 'source' && sourceCapable ? 'source' : 'preview';
-          let forcedSource = false;
-          const views = classification.type === 'code'
-            ? ['source']
-            : sourceCapable ? ['preview', 'source'] : ['preview'];
-          const fileUrl = `/api/file?path=${encodeURIComponent(relativePath)}&v=${encodeURIComponent(version)}`;
-          const base = {
-            fileType: classification.type,
-            title: path.basename(target),
-            path: relativePath,
-            size: stat.size,
-            readableSize: formatBytes(stat.size),
-            mime: getContentType(target),
-            modifiedAt: stat.mtime.toISOString(),
+          const preview = await renderPreview({
+            target,
+            relativePath,
+            stat,
+            classification,
+            requestedView,
             version,
-            views,
-          };
-
-          let textPreview: Awaited<ReturnType<typeof readTextPreview>> | null = null;
-          if (selectedView === 'source' || classification.type === 'code' || classification.type === 'markdown') {
-            textPreview = await readTextPreview(target, stat.size);
-          }
-
-          if (
-            classification.type === 'markdown'
-            && selectedView === 'preview'
-            && (stat.size > MAX_TEXT_PREVIEW_BYTES || textPreview?.truncated)
-          ) {
-            selectedView = 'source';
-            forcedSource = true;
-          }
-
-          if (selectedView === 'source' || classification.type === 'code') {
-            textPreview ||= await readTextPreview(target, stat.size);
-            const language = languageForFile(target) || classification.language || 'plaintext';
-            const highlighted = hljs.getLanguage(language)
-              ? hljs.highlight(textPreview.content, { language }).value
-              : hljs.highlightAuto(textPreview.content).value;
-            return Response.json(
-              {
-                ...base,
-                views: forcedSource ? ['source'] : base.views,
-                type: 'code',
-                view: 'source',
-                html: highlighted,
-                content: textPreview.content,
-                language,
-                lineCount: textPreview.lineCount,
-                encoding: 'UTF-8',
-                truncated: textPreview.truncated,
-                forcedSource,
-              },
-              { headers: noCache }
-            );
-          }
-
-          if (classification.type === 'markdown') {
-            const result = renderMarkdown(textPreview?.content || '', relativePath);
-            return Response.json(
-              { ...base, type: 'markdown', view: 'preview', html: result.html, documentTitle: result.title },
-              { headers: noCache }
-            );
-          }
-
-          if (classification.type === 'image') {
-            return Response.json(
-              { ...base, type: 'image', view: 'preview', url: fileUrl },
-              { headers: noCache }
-            );
-          }
-
-          if (classification.type === 'pdf') {
-            return Response.json(
-              { ...base, type: 'pdf', view: 'preview', url: fileUrl },
-              { headers: noCache }
-            );
-          }
-
-          if (classification.type === 'html') {
-            return Response.json(
-              {
-                ...base,
-                type: 'html',
-                view: 'preview',
-                url: `/preview-html/${relativePath.split('/').map(encodeURIComponent).join('/')}?v=${encodeURIComponent(version)}`,
-              },
-              { headers: noCache }
-            );
-          }
-
-          return Response.json(
-            {
-              ...base,
-              type: 'binary',
-              view: 'preview',
-              url: fileUrl,
-            },
-            { headers: noCache }
-          );
+          });
+          return Response.json(preview, { headers: noCache });
         }
 
         return new Response('Not found', { status: 404, headers: noCache });

@@ -44,6 +44,13 @@ bun install
 bun run dev [path]
 ```
 
+Preview behavior is split into two provider layers:
+
+- `src/providers/` owns server-side file classification capabilities and preview payloads.
+- `src/assets/providers/` owns browser rendering and format-specific viewer state.
+
+Add a new format by registering one server provider and one matching view provider instead of extending the server route or application shell with another type branch.
+
 ### Build
 
 ```bash
