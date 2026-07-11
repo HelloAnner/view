@@ -50,6 +50,14 @@ function shouldIgnoreName(name: string): boolean {
   return IGNORED_NAMES.has(name) || name.startsWith('.');
 }
 
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>]/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+  })[character] || character);
+}
+
 function buildDirectoryNode(root: string, current: string): TreeNode {
   const stat = fs.statSync(current);
   const relative = path.relative(root, current) || '.';
@@ -266,9 +274,11 @@ export async function startServer(options: PreviewOptions): Promise<{
             .replace('{{APP_CSS}}', appStyles as unknown as string)
             .replace('{{APP_PROVIDERS}}', appProviders as unknown as string)
             .replace('{{APP_SCRIPT}}', appScript as unknown as string)
+            .replace('{{APP_TITLE}}', escapeHtmlText(options.launchTitle))
             .replace('{{APP_CONTEXT}}', JSON.stringify({
               rootName: path.basename(options.root),
               rootPath: options.root,
+              launchTitle: options.launchTitle,
               launchMode: options.launchMode,
               initialFile: initialFile ? path.relative(options.root, initialFile) : null,
             }));

@@ -75,6 +75,7 @@ async function main() {
   const baseOptions = {
     port: parseInt(opts.port, 10) || 0,
     open: opts.open,
+    launchTitle: path.basename(resolved) || resolved,
   };
 
   if (fs.statSync(resolved).isFile()) {

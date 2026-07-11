@@ -2,6 +2,7 @@ export interface PreviewOptions {
   root: string;
   port: number;
   open: boolean;
+  launchTitle: string;
   launchMode: 'file' | 'directory';
   initialFile?: string;
 }

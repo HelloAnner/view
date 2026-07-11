@@ -68,6 +68,7 @@ function treeIcon(type) {
 
 projectName.textContent = appContext.rootName || 'view';
 projectIdentity.title = appContext.rootPath || '';
+document.title = appContext.launchTitle || appContext.rootName || 'view';
 appEl.classList.add(`launch-${appContext.launchMode}`);
 if (appContext.launchMode === 'file') appEl.classList.add('explorer-hidden');
 
@@ -649,7 +650,6 @@ function renderPreview(data) {
   currentVersion = data.version;
   setFileContext(data.path, data.fileType || data.type);
   setFileActions(data);
-  document.title = `${data.title} — view`;
   activeViewProvider = viewProviders.get(data.type) || viewProviders.get('binary');
   activeViewProvider.render(data);
 }
