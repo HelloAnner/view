@@ -37,8 +37,24 @@ pnpm-debug.log*
 # Local environment and secrets
 .env
 .env.*
+*.env
 !.env.example
 *.local
+*.pem
+*.key
+
+# Language and framework caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.next/
+.nuxt/
+.svelte-kit/
+.gradle/
 
 # Raster images and generated visual assets
 *.png
@@ -81,6 +97,12 @@ pnpm-debug.log*
 *.db
 *.sqlite
 *.sqlite3
+*.class
+*.jar
+*.o
+*.a
+*.wasm
+*.bin
 *.dmg
 *.pkg
 *.exe
