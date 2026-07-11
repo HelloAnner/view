@@ -42,16 +42,6 @@
           <span class="file-placeholder">No file selected</span>
         </div>
         <div class="filebar-actions">
-          <div class="view-switch" id="viewSwitch" role="group" aria-label="File view" hidden>
-            <button class="view-option" type="button" data-view="preview" aria-label="Preview file" title="Preview">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              <span>Preview</span>
-            </button>
-            <button class="view-option" type="button" data-view="source" aria-label="View source" title="Source">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-              <span>Source</span>
-            </button>
-          </div>
           <button class="icon-button" id="wrapBtn" aria-label="Wrap long lines" aria-pressed="false" title="Wrap long lines" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 6h13a3 3 0 0 1 0 6H7"></path><polyline points="10 9 7 12 10 15"></polyline><line x1="4" y1="18" x2="12" y2="18"></line>
@@ -78,9 +68,6 @@
           <button class="icon-button" id="openExternalBtn" aria-label="Open preview in new tab" title="Open preview in new tab" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
           </button>
-          <div class="refresh-state" id="refreshState" title="Files are checked for changes every 5 seconds">
-            <span class="refresh-dot"></span><span id="refreshLabel">Watching</span>
-          </div>
         </div>
       </header>
       <div class="content" id="content" tabindex="-1">

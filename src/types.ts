@@ -4,10 +4,12 @@ export interface PreviewOptions {
   open: boolean;
   launchTitle: string;
   launchMode: 'file' | 'directory';
+  treeMode: 'workspace' | 'git-changes';
+  gitRoot?: string;
   initialFile?: string;
 }
 
-export type PreviewType = 'markdown' | 'image' | 'pdf' | 'html' | 'code' | 'binary';
+export type PreviewType = 'markdown' | 'image' | 'pdf' | 'html' | 'code' | 'binary' | 'deleted';
 
 export interface TreeNode {
   name: string;

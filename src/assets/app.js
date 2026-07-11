@@ -1,7 +1,7 @@
 const appContext = {{APP_CONTEXT}};
 const params = new URLSearchParams(location.search);
 let requestedFile = params.get('file') || appContext.initialFile;
-let requestedView = params.get('view') === 'source' ? 'source' : 'preview';
+let requestedView = 'preview';
 let currentPath = null;
 let currentPreview = null;
 let currentView = requestedView;
@@ -28,7 +28,6 @@ const projectName = document.getElementById('projectName');
 const explorerBtn = document.getElementById('explorerBtn');
 const collapseExplorerBtn = document.getElementById('collapseExplorerBtn');
 const fileContextEl = document.getElementById('fileContext');
-const viewSwitch = document.getElementById('viewSwitch');
 const wrapBtn = document.getElementById('wrapBtn');
 const copyContentBtn = document.getElementById('copyContentBtn');
 const copyPathBtn = document.getElementById('copyPathBtn');
@@ -37,8 +36,6 @@ const outlineCloseBtn = document.getElementById('outlineCloseBtn');
 const reloadPreviewBtn = document.getElementById('reloadPreviewBtn');
 const openExternalBtn = document.getElementById('openExternalBtn');
 const panelScrim = document.getElementById('panelScrim');
-const refreshState = document.getElementById('refreshState');
-const refreshLabel = document.getElementById('refreshLabel');
 const toastEl = document.getElementById('toast');
 
 let treeRoot = null;
@@ -46,6 +43,7 @@ let ignoreScrollSpy = false;
 let outlineRaf = 0;
 let searchTimer = 0;
 let searchAbortController = null;
+let treeRefreshInFlight = false;
 const expandedDirs = new Set();
 const loadedDirs = new Map();
 const SIDEBAR_WIDTH_KEY = 'view-sidebar-width';
@@ -88,8 +86,6 @@ function readLocationHash() {
 
 function updateFileLocation(filePath, hash = '', view = currentView, historyMode = 'replace') {
   const search = new URLSearchParams({ file: filePath });
-  const sourceIsOptional = view === 'source' && currentPreview?.fileType !== 'code';
-  if (sourceIsOptional || (view === 'source' && !currentPreview)) search.set('view', 'source');
   const suffix = hash ? `#${encodeURIComponent(hash)}` : '';
   const nextUrl = `?${search.toString()}${suffix}`;
   if (historyMode === 'push') history.pushState(null, '', nextUrl);
@@ -102,12 +98,6 @@ function setContentMode(mode) {
   if (mode === 'fill') contentEl.classList.add('content--fill');
   if (mode === 'media') contentEl.classList.add('content--media');
   appEl.dataset.mode = mode;
-}
-
-function setRefreshState(state, label) {
-  refreshState.classList.toggle('is-loading', state === 'loading');
-  refreshState.classList.toggle('is-error', state === 'error');
-  refreshLabel.textContent = label;
 }
 
 function setFileContext(filePath, type = 'binary', loading = false) {
@@ -130,18 +120,9 @@ function setFileContext(filePath, type = 'binary', loading = false) {
 function setFileActions(data) {
   const hasFile = Boolean(data?.path || currentPath);
   const isCode = data?.type === 'code';
-  const views = Array.isArray(data?.views) ? data.views : [];
-  const hasViewSwitch = views.includes('preview') && views.includes('source');
   copyPathBtn.hidden = !hasFile;
   copyContentBtn.hidden = !isCode;
   wrapBtn.hidden = !isCode;
-  viewSwitch.hidden = !hasViewSwitch;
-  appEl.classList.toggle('has-view-switch', hasViewSwitch);
-  viewSwitch.querySelectorAll('.view-option').forEach((button) => {
-    const active = button.dataset.view === data?.view;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-pressed', String(active));
-  });
   const isLivePreview = data?.view === 'preview' && data?.fileType === 'html';
   reloadPreviewBtn.hidden = !isLivePreview;
   openExternalBtn.hidden = !(data?.view === 'preview' && ['html', 'image', 'pdf'].includes(data?.fileType));
@@ -272,12 +253,6 @@ copyPathBtn.addEventListener('click', () => {
 copyContentBtn.addEventListener('click', () => {
   if (currentPreview?.type === 'code') copyText(currentPreview.content, 'File contents copied');
 });
-viewSwitch.addEventListener('click', (event) => {
-  const button = event.target.closest('.view-option');
-  if (!button || !currentPath || button.dataset.view === currentView) return;
-  saveCurrentViewerState();
-  openFile(currentPath, false, button.dataset.view, '', 'push');
-});
 reloadPreviewBtn.addEventListener('click', () => {
   const frame = contentEl.querySelector('.html-preview iframe');
   if (!frame) return;
@@ -302,6 +277,55 @@ async function loadTree() {
     }
   } catch (err) {
     treeEl.innerHTML = `<div class="empty">${escapeHtml(err instanceof Error ? err.message : 'Could not load files')}</div>`;
+  }
+}
+
+function pruneDetachedTreeState() {
+  const root = loadedDirs.get('') || treeRoot;
+  if (!root) return;
+
+  const reachableDirectories = new Set(['']);
+  const visitedDirectories = new Set();
+
+  function visit(node) {
+    const nodePath = normalizeTreePath(node.path);
+    if (visitedDirectories.has(nodePath)) return;
+    visitedDirectories.add(nodePath);
+    const current = loadedDirs.get(nodePath) || node;
+
+    for (const child of current.children || []) {
+      if (child.type !== 'directory') continue;
+      const childPath = normalizeTreePath(child.path);
+      reachableDirectories.add(childPath);
+      if (loadedDirs.has(childPath)) visit(child);
+    }
+  }
+
+  visit(root);
+  for (const dirPath of loadedDirs.keys()) {
+    if (!reachableDirectories.has(dirPath)) loadedDirs.delete(dirPath);
+  }
+  for (const dirPath of expandedDirs) {
+    if (!reachableDirectories.has(dirPath)) expandedDirs.delete(dirPath);
+  }
+}
+
+async function refreshTree() {
+  if (appContext.launchMode !== 'directory' || treeRefreshInFlight || !treeRoot) return;
+  treeRefreshInFlight = true;
+
+  try {
+    const loadedPaths = ['', ...[...loadedDirs.keys()].filter((dirPath) => dirPath !== '')];
+    const results = await Promise.allSettled(
+      loadedPaths.map((dirPath) => fetchDirectory(dirPath))
+    );
+
+    if (results[0]?.status === 'fulfilled') pruneDetachedTreeState();
+    const query = treeSearch.value.trim();
+    if (query) await searchFiles(query);
+    else renderTree();
+  } finally {
+    treeRefreshInFlight = false;
   }
 }
 
@@ -671,17 +695,15 @@ contentEl.addEventListener('click', (event) => {
   if (url.origin !== location.origin || !url.searchParams.has('file')) return;
   event.preventDefault();
   const filePath = url.searchParams.get('file');
-  const view = url.searchParams.get('view') === 'source' ? 'source' : 'preview';
   const hash = url.hash ? decodeURIComponent(url.hash.slice(1)) : '';
-  openFile(filePath, false, view, hash, 'push');
+  openFile(filePath, false, 'preview', hash, 'push');
 });
 
 window.addEventListener('popstate', () => {
   const nextParams = new URLSearchParams(location.search);
   const filePath = nextParams.get('file') || appContext.initialFile;
   if (!filePath) return;
-  const view = nextParams.get('view') === 'source' ? 'source' : 'preview';
-  openFile(filePath, false, view, readLocationHash(), 'none');
+  openFile(filePath, false, 'preview', readLocationHash(), 'none');
 });
 
 async function openFile(
@@ -708,11 +730,9 @@ async function openFile(
     clearOutline();
     setContentMode('document');
     contentEl.innerHTML = '<div class="viewer-loading"><div class="loading-lockup"><span class="spinner"></span><span>Opening file…</span></div></div>';
-    setRefreshState('loading', 'Opening');
     if (appContext.launchMode === 'directory' && window.innerWidth <= 768) toggleExplorer(false);
   } else {
     refreshInFlight = true;
-    setRefreshState('loading', 'Checking');
   }
 
   const controller = new AbortController();
@@ -728,7 +748,6 @@ async function openFile(
     });
     if (currentPath !== filePath) return;
     if (res.status === 304) {
-      setRefreshState('ready', 'Watching');
       return;
     }
     if (!res.ok) throw new Error(await res.text());
@@ -744,11 +763,8 @@ async function openFile(
     const targetHash = hash || viewerState?.hash || '';
     if (targetHash) restoreHashScroll(targetHash);
     updateFileLocation(filePath, targetHash, currentView, 'replace');
-    setRefreshState('ready', silent ? 'Updated' : 'Watching');
-    if (silent) window.setTimeout(() => setRefreshState('ready', 'Watching'), 1200);
   } catch (err) {
     if (err?.name === 'AbortError') return;
-    setRefreshState('error', silent ? 'Retrying' : 'Failed');
     if (!silent) {
       const message = err instanceof Error ? err.message : 'Could not preview this file';
       setContentMode('document');
@@ -939,9 +955,10 @@ window.addEventListener('resize', () => {
   syncScrim();
 });
 
-// Auto-refresh the current file every 5 seconds to reflect local changes.
+// Auto-refresh the current file and loaded directory tree every 5 seconds.
 setInterval(() => {
   if (currentPath) openFile(currentPath, true, currentView);
+  refreshTree();
 }, 5000);
 
 // Restore sidebar width from localStorage.
@@ -998,11 +1015,10 @@ if (appContext.launchMode === 'file') {
   });
 })();
 
-// Notify the server when this tab opens/closes so the background process
-// can shut down once no tabs are active.
+// Notify the server only when this tab explicitly opens/closes. Background
+// throttling and computer sleep must not be interpreted as a closed tab.
 (function setupTabLifecycle() {
   const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const pingIntervalMs = 30 * 1000;
   let closed = false;
 
   function post(endpoint, body) {
@@ -1023,17 +1039,15 @@ if (appContext.launchMode === 'file') {
   }
 
   post('/api/open', { tabId });
-  const pingTimer = setInterval(() => post('/api/ping', { tabId }), pingIntervalMs);
 
   window.__viewTabId = tabId;
 
-  function onUnload() {
+  function onPageHide(event) {
+    if (event.persisted) return;
     if (closed) return;
     closed = true;
-    clearInterval(pingTimer);
     beacon('/api/close', { tabId });
   }
 
-  window.addEventListener('beforeunload', onUnload);
-  window.addEventListener('pagehide', onUnload);
+  window.addEventListener('pagehide', onPageHide);
 })();

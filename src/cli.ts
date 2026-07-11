@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync, spawn } from 'node:child_process';
 import { startServer } from './server.ts';
+import { resolveGitRepositoryRoot } from './git-changes.ts';
 import type { PreviewOptions } from './types.ts';
 
 // Bun compiled binaries sometimes duplicate the virtual script path in argv
@@ -24,6 +25,7 @@ program
   .version('0.1.0')
   .argument('[path]', 'file or directory to preview', '.')
   .option('-p, --port <number>', 'server port', '0')
+  .option('-g, --git <directory>', 'show only uncommitted files under a Git directory')
   .option('--no-open', 'do not open browser automatically')
   .option('--background', 'run as a background server (internal use)')
   .parse();
@@ -32,7 +34,9 @@ const MAX_PORT_FILE_WAIT_MS = 3000;
 const PORT_FILE_POLL_MS = 80;
 
 async function main() {
-  const target = program.args[0] || '.';
+  const opts = program.opts();
+  const gitDirectory = typeof opts.git === 'string' ? opts.git : null;
+  const target = gitDirectory || program.args[0] || '.';
   const resolved = path.resolve(target);
 
   if (!fs.existsSync(resolved)) {
@@ -40,7 +44,11 @@ async function main() {
     process.exit(1);
   }
 
-  const opts = program.opts();
+  const targetStat = fs.statSync(resolved);
+  if (gitDirectory && !targetStat.isDirectory()) {
+    console.error(`Error: --git requires a directory, but "${target}" is not a directory.`);
+    process.exit(1);
+  }
 
   if (!opts.background) {
     const portFile = path.join(os.tmpdir(), `view-port-${process.pid}-${Date.now()}`);
@@ -78,10 +86,33 @@ async function main() {
     launchTitle: path.basename(resolved) || resolved,
   };
 
-  if (fs.statSync(resolved).isFile()) {
+  if (gitDirectory) {
+    let gitRoot: string;
+    try {
+      gitRoot = resolveGitRepositoryRoot(resolved);
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : 'Not a Git repository.'}`);
+      process.exit(1);
+    }
+
+    const options: PreviewOptions = {
+      root: resolved,
+      gitRoot,
+      launchMode: 'directory',
+      treeMode: 'git-changes',
+      ...baseOptions,
+    };
+    const { url } = await startServer(options);
+    await writePortFile(url);
+    if (options.open) openBrowser(url);
+    return;
+  }
+
+  if (targetStat.isFile()) {
     const options: PreviewOptions = {
       root: path.dirname(resolved),
       launchMode: 'file',
+      treeMode: 'workspace',
       initialFile: path.basename(resolved),
       ...baseOptions,
     };
@@ -93,6 +124,7 @@ async function main() {
     const options: PreviewOptions = {
       root: resolved,
       launchMode: 'directory',
+      treeMode: 'workspace',
       ...baseOptions,
     };
     const { url } = await startServer(options);

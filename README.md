@@ -5,11 +5,13 @@ A lightweight CLI tool to preview local files and directories in a focused, read
 ## Features
 
 - `v <path>` previews a file or directory instantly
+- `v --git <directory>` shows only uncommitted files in a Git repository or subdirectory
 - Directory preview starts a local temporary HTTP server
 - Collapsible file explorer with lazy-loaded folders and file search
 - Markdown renders as a focused document with a contextual heading outline
 - Code and readable text open in an editor-style viewer with line numbers, wrapping, copy actions, and file metadata
-- Markdown, HTML, and SVG files can switch between Preview and Source without losing scroll or zoom state
+- Code uses a bundled JetBrains Mono font; Git mode adds compact green/blue/red change bars in the line-number gutter
+- Markdown, HTML, and SVG files open directly in their default preview
 - Images open on a pannable canvas with fit, actual-size, and zoom controls
 - HTML previews run in a sandboxed route isolated from the workspace UI
 - File explorer navigation supports keyboard arrows, Home/End, Enter, `/` to filter, and `Ctrl/Cmd+B` to toggle
@@ -17,7 +19,8 @@ A lightweight CLI tool to preview local files and directories in a focused, read
 - Supports relative-path images in Markdown
 - Also previews images, PDFs, HTML pages, and downloadable binary files
 - Light / dark theme follows your system preference
-- Detects file changes every 5 seconds without resetting unchanged previews
+- Silently detects file and directory-tree changes every 5 seconds without resetting unchanged previews
+- Background previews survive browser throttling and computer sleep, with a 12-hour maximum lifetime
 - Large text files fall back to a clearly marked truncated source preview
 - Read-only: never modifies your files
 
@@ -74,6 +77,10 @@ v ./docs
 v ./README.md
 v ./src/server.ts
 
+# Watch only staged, unstaged, untracked, and deleted files in a Git directory
+v --git ./my-repository
+v --git ./my-repository/src
+
 # Use a fixed port and do not open the browser
 v ./docs --port 3000 --no-open
 ```
@@ -83,6 +90,7 @@ v ./docs --port 3000 --no-open
 | Option        | Description                          |
 |---------------|--------------------------------------|
 | `-p, --port`  | Server port (default: random port)   |
+| `-g, --git <directory>` | Show only uncommitted files under a Git directory |
 | `--no-open`   | Do not open browser automatically    |
 | `-h, --help`  | Show help                            |
 | `-V, --version` | Show version                       |

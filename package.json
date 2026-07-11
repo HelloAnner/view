@@ -8,7 +8,7 @@
     "v": "./dist/cli.js"
   },
   "scripts": {
-    "build": "bun build src/cli.ts --outfile dist/cli.js --target node",
+    "build": "bun build src/cli.ts --outdir dist --target node",
     "compile": "bun build src/cli.ts --outfile dist/view --compile",
     "dev": "bun run src/cli.ts",
     "test": "bun test"
@@ -25,6 +25,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "commander": "^12.1.0",
     "highlight.js": "^11.11.1",
     "marked": "^15.0.11",

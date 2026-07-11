@@ -5,6 +5,7 @@
     "": {
       "name": "view",
       "dependencies": {
+        "@fontsource-variable/jetbrains-mono": "^5.2.8",
         "commander": "^12.1.0",
         "highlight.js": "^11.11.1",
         "marked": "^15.0.11",
@@ -19,6 +20,8 @@
     },
   },
   "packages": {
+    "@fontsource-variable/jetbrains-mono": ["@fontsource-variable/jetbrains-mono@5.2.8", "https://npm.fineres.com/@fontsource-variable/jetbrains-mono/-/jetbrains-mono-5.2.8.tgz", {}, "sha512-WBA9elru6Jdp5df2mES55wuOO0WIrn3kpXnI4+W2ek5u3ZgLS9XS4gmIlcQhiZOWEKl95meYdvK7xI+ETLCq/Q=="],
+
     "@types/bun": ["@types/bun@1.3.14", "https://npm.fineres.com/@types/bun/-/bun-1.3.14.tgz", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
     "@types/node": ["@types/node@26.1.1", "https://npm.fineres.com/@types/node/-/node-26.1.1.tgz", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw=="],

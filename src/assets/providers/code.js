@@ -66,9 +66,17 @@ window.viewProviderRegistry.register('code', (dependencies) => {
       clearOutline();
       const lines = highlightedLines(data.html);
       const language = escapeHtml(data.language || 'plaintext');
+      const lineChanges = new Map(
+        (Array.isArray(data.lineChanges) ? data.lineChanges : [])
+          .map((change) => [Number(change.line), change.kind])
+      );
       const rows = lines.map((line, index) => {
         const number = index + 1;
-        return `<div class="code-line" id="L${number}" data-line="${number}">
+        const changeKind = lineChanges.get(number);
+        const changeClass = ['added', 'modified', 'deleted'].includes(changeKind)
+          ? ` git-change git-change--${changeKind}`
+          : '';
+        return `<div class="code-line${changeClass}" id="L${number}" data-line="${number}">
           <span class="line-number" data-line="${number}" aria-hidden="true">${number}</span>
           <code class="line-code hljs language-${language}">${line}</code>
         </div>`;

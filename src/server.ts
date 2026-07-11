@@ -7,6 +7,13 @@ import {
   classifyFileName,
   getContentType,
 } from './file-types.ts';
+import {
+  buildGitDirectoryNode,
+  getGitLineChanges,
+  GitChangeIndex,
+  searchGitChangedPaths,
+} from './git-changes.ts';
+import { createDeletedPreview } from './providers/deleted.ts';
 import { renderPreview } from './providers/registry.ts';
 import template from './assets/app.html' with { type: 'text' };
 import appStyles from './assets/app.css' with { type: 'text' };
@@ -18,6 +25,8 @@ import imageViewProvider from './assets/providers/image.js' with { type: 'text' 
 import pdfViewProvider from './assets/providers/pdf.js' with { type: 'text' };
 import htmlViewProvider from './assets/providers/html.js' with { type: 'text' };
 import binaryViewProvider from './assets/providers/binary.js' with { type: 'text' };
+import deletedViewProvider from './assets/providers/deleted.js' with { type: 'text' };
+import jetbrainsMonoFont from '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2' with { type: 'file' };
 
 const appProviders = [
   providerRegistry,
@@ -27,6 +36,7 @@ const appProviders = [
   pdfViewProvider,
   htmlViewProvider,
   binaryViewProvider,
+  deletedViewProvider,
 ].join('\n');
 
 const IGNORED_NAMES = new Set([
@@ -188,8 +198,7 @@ function guessInitialFile(root: string): string | null {
 }
 
 const MAX_SERVER_LIFETIME_MS = 12 * 60 * 60 * 1000;
-const TAB_PING_TIMEOUT_MS = 60 * 1000;
-const TAB_CHECK_INTERVAL_MS = 10 * 1000;
+const TAB_CLOSE_GRACE_MS = 5 * 1000;
 
 export async function startServer(options: PreviewOptions): Promise<{
   server: Server<unknown>;
@@ -197,9 +206,12 @@ export async function startServer(options: PreviewOptions): Promise<{
 }> {
   const initialFile = options.initialFile
     ? path.resolve(options.root, options.initialFile)
-    : guessInitialFile(options.root);
+    : options.treeMode === 'workspace' ? guessInitialFile(options.root) : null;
+  const gitChangeIndex = options.treeMode === 'git-changes' && options.gitRoot
+    ? new GitChangeIndex(options.gitRoot, options.root)
+    : null;
 
-  const tabs = new Map<string, number>();
+  const tabs = new Set<string>();
   let hasHadTab = false;
   let server: Server<unknown>;
   let idleShutdownTimer: ReturnType<typeof setTimeout> | null = null;
@@ -209,7 +221,6 @@ export async function startServer(options: PreviewOptions): Promise<{
     if (shutdownStarted) return;
     shutdownStarted = true;
     clearTimeout(lifetimeTimer);
-    clearInterval(checkTimer);
     if (idleShutdownTimer) clearTimeout(idleShutdownTimer);
     try {
       server.stop();
@@ -219,7 +230,7 @@ export async function startServer(options: PreviewOptions): Promise<{
     process.exit(0);
   }
 
-  function scheduleIdleShutdown(delayMs = 750) {
+  function scheduleIdleShutdown(delayMs = TAB_CLOSE_GRACE_MS) {
     if (!hasHadTab || tabs.size > 0 || idleShutdownTimer) return;
     idleShutdownTimer = setTimeout(() => {
       idleShutdownTimer = null;
@@ -237,18 +248,6 @@ export async function startServer(options: PreviewOptions): Promise<{
     console.log('Maximum server lifetime reached (12h), shutting down.');
     shutdownServer();
   }, MAX_SERVER_LIFETIME_MS);
-
-  const checkTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [tabId, lastPing] of tabs) {
-      if (now - lastPing > TAB_PING_TIMEOUT_MS) {
-        tabs.delete(tabId);
-      }
-    }
-    if (hasHadTab && tabs.size === 0) {
-      scheduleIdleShutdown();
-    }
-  }, TAB_CHECK_INTERVAL_MS);
 
   async function readJsonBody(req: Request): Promise<Record<string, unknown> | null> {
     try {
@@ -291,9 +290,25 @@ export async function startServer(options: PreviewOptions): Promise<{
           return new Response(null, { status: 204, headers: noCache });
         }
 
+        if (pathname === '/assets/jetbrains-mono.woff2') {
+          return new Response(Bun.file(jetbrainsMonoFont), {
+            headers: {
+              'Content-Type': 'font/woff2',
+              'Cache-Control': 'public, max-age=31536000, immutable',
+            },
+          });
+        }
+
         if (pathname === '/api/tree') {
           const raw = url.searchParams.get('path') || '.';
           const target = resolveSafePath(options.root, raw);
+          if (gitChangeIndex) {
+            const changedPaths = await gitChangeIndex.getPaths();
+            return Response.json(
+              buildGitDirectoryNode(options.root, target, changedPaths),
+              { headers: noCache }
+            );
+          }
           const stat = fs.statSync(target);
           if (!stat.isDirectory()) {
             return new Response('Not a directory', { status: 400, headers: noCache });
@@ -303,6 +318,10 @@ export async function startServer(options: PreviewOptions): Promise<{
 
         if (pathname === '/api/search') {
           const query = url.searchParams.get('q') || '';
+          if (gitChangeIndex) {
+            const changedPaths = await gitChangeIndex.getPaths();
+            return Response.json(searchGitChangedPaths(changedPaths, query), { headers: noCache });
+          }
           return Response.json(searchFiles(options.root, query), { headers: noCache });
         }
 
@@ -350,18 +369,8 @@ export async function startServer(options: PreviewOptions): Promise<{
           const body = await readJsonBody(req);
           const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
           if (tabId) {
-            tabs.set(tabId, Date.now());
+            tabs.add(tabId);
             hasHadTab = true;
-            cancelIdleShutdown();
-          }
-          return new Response('ok', { headers: noCache });
-        }
-
-        if (pathname === '/api/ping' && req.method === 'POST') {
-          const body = await readJsonBody(req);
-          const tabId = body && typeof body.tabId === 'string' ? body.tabId : null;
-          if (tabId) {
-            tabs.set(tabId, Date.now());
             cancelIdleShutdown();
           }
           return new Response('ok', { headers: noCache });
@@ -391,10 +400,34 @@ export async function startServer(options: PreviewOptions): Promise<{
           const raw = url.searchParams.get('path');
           if (!raw) return new Response('Missing path', { status: 400, headers: noCache });
           const target = resolveSafePath(options.root, raw);
+          const relativePath = path.relative(options.root, target);
+
+          if (!fs.existsSync(target)) {
+            if (gitChangeIndex) {
+              const changedPaths = await gitChangeIndex.getPaths();
+              const normalizedRelativePath = relativePath.split(path.sep).join('/');
+              if (changedPaths.includes(normalizedRelativePath)) {
+                const version = `deleted:${normalizedRelativePath}`;
+                if (url.searchParams.get('version') === version) {
+                  return new Response(null, { status: 304, headers: noCache });
+                }
+                return Response.json(
+                  createDeletedPreview(
+                    target,
+                    normalizedRelativePath,
+                    classifyFileName(target),
+                    version
+                  ),
+                  { headers: noCache }
+                );
+              }
+            }
+            return new Response('File not found', { status: 404, headers: noCache });
+          }
+
           const stat = fs.statSync(target);
           if (!stat.isFile()) return new Response('Not a file', { status: 400, headers: noCache });
 
-          const relativePath = path.relative(options.root, target);
           const version = fileVersion(stat);
           const requestedVersion = url.searchParams.get('version');
           if (requestedVersion === version) {
@@ -411,6 +444,18 @@ export async function startServer(options: PreviewOptions): Promise<{
             requestedView,
             version,
           });
+          if (gitChangeIndex && options.gitRoot && preview.type === 'code') {
+            try {
+              preview.lineChanges = await getGitLineChanges(
+                options.gitRoot,
+                options.root,
+                relativePath,
+                Number(preview.lineCount) || 1
+              );
+            } catch {
+              preview.lineChanges = [];
+            }
+          }
           return Response.json(preview, { headers: noCache });
         }
 
