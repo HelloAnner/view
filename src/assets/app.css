@@ -73,6 +73,10 @@ html, body {
   color: var(--text);
 }
 
+code, pre, kbd, samp {
+  font-family: var(--font-code);
+}
+
 .app {
   display: flex;
   height: 100vh;
@@ -873,6 +877,7 @@ html, body {
 .line-code {
   min-height: 21px;
   padding: 0 30px 0 18px;
+  font-family: var(--font-code);
   white-space: pre;
   color: var(--hl-base);
 }
