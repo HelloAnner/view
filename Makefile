@@ -1,19 +1,27 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
+BUN ?= bun
 
 BINARY = dist/view
 ENTRY = src/cli.ts
 
-.PHONY: all build install uninstall clean
+.PHONY: all deps check build install uninstall clean
 
 all: build
 
-build:
-	bun build $(ENTRY) --outfile $(BINARY) --compile
+deps:
+	@command -v $(BUN) >/dev/null 2>&1 || { echo "Bun is required for make build; use make install for automatic setup."; exit 1; }
+	$(BUN) install --frozen-lockfile
 
-install: build
-	install -d $(BINDIR)
-	install -m 755 $(BINARY) $(BINDIR)/v
+check: deps
+	$(BUN) x tsc --noEmit
+	$(BUN) test
+
+build: deps
+	$(BUN) build $(ENTRY) --outfile $(BINARY) --compile
+
+install:
+	@PREFIX="$(PREFIX)" BINDIR="$(BINDIR)" bash scripts/install.sh
 
 uninstall:
 	rm -f $(BINDIR)/v
